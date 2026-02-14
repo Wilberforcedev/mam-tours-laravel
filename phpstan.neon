@@ -1,0 +1,22 @@
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/Http/Controllers
+        - app/Models
+
+    # Start with level 5 for now
+    level: 5
+
+    ignoreErrors:
+        - '#PHPDoc tag @var#'
+        - '#Call to an undefined method#'
+        
+    excludePaths:
+        - app/Console/Kernel.php
+        - app/Http/Kernel.php
+        - app/Http/Middleware
+        - app/Providers
+
+    checkMissingIterableValueType: false

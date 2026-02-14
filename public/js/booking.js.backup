@@ -1,0 +1,445 @@
+// API Base URL
+const API_BASE = '/api';
+
+// DOM Elements
+const bookingForm = document.getElementById('bookingForm');
+const carSelect = document.getElementById('carSelect');
+const selectedCarIdInput = document.getElementById('selectedCarId');
+const carInfo = document.getElementById('carInfo');
+const submitBtn = document.getElementById('submitBtn');
+const submitText = document.getElementById('submitText');
+const submitLoader = document.getElementById('submitLoader');
+const toast = document.getElementById('toast');
+const toastTitle = document.getElementById('toastTitle');
+const toastMessage = document.getElementById('toastMessage');
+const startDateInput = document.getElementById('startDate');
+const endDateInput = document.getElementById('endDate');
+
+// State
+let allCars = [];
+let selectedCar = null;
+let selectedCategory = 'all';
+let categories = [];
+const isBookingPage = !!bookingForm;
+const isHome = !isBookingPage;
+
+function getCarImage(brand, model, category) {
+    const m = (model || '').toLowerCase().trim();
+    const b = (brand || '').toLowerCase().trim();
+    const c = (category || '').toLowerCase().trim();
+    const map = {
+        'noah': 'images/Toyota Noah.jpg',
+        'alphard': 'images/Alphard.jpeg',
+        'rav4': 'images/Rav 4.jpeg',
+        'rav 4': 'images/Rav 4.jpeg',
+        'land cruiser': 'images/Land cruiser.jpg',
+        'landcruiser': 'images/Land cruiser.jpg',
+        'hilux': 'images/Hilux.jpg',
+        'hilux surf': 'images/Hilux Surf.jpg',
+        'harrier': 'images/Harrier.jpg',
+        'kluger': 'images/Kruger.jpg',
+        'vanguard': 'images/Vangurad Toyota.jpg',
+        'auris': 'images/Auris.jpg',
+        'avensis': 'images/Toyota Avensis.jpg',
+        'allex': 'images/Toyota Allex.jpg',
+        'fielder': 'images/Toyota Fielder.jpg',
+        'fortuner': 'images/Toyota Fortuner.jpg',
+        'hiace': 'images/Toyota Hiace.jpg',
+        'isis': 'images/Toyota Isis.jpg',
+        'rumion': 'images/Rumion.jpg',
+        'spacio': 'images/Spacio.jpg',
+        'runx': 'images/Toyota Runx.jpg',
+        'wrangler': 'images/jeep wrangler.jpg',
+        'grand cherokee': 'images/Jeep Grand Cherokee.jpg',
+        's500': 'images/s class.jpeg',
+        's class': 'images/s class.jpeg',
+        's-class': 'images/s class.jpeg'
+    };
+    if (map[m]) return map[m];
+    if (m === 'xf' && b.includes('jaguar')) return 'images/Jaguar xf 2015.jpg';
+    if (b.includes('jeep')) {
+        if (m.includes('wrangler')) return 'images/jeep wrangler.jpg';
+        if (m.includes('grand cherokee')) return 'images/Jeep Grand Cherokee.jpg';
+    }
+    if (c === 'suv') return 'images/Rav 4.jpeg';
+    if (c === 'minivan') return 'images/Toyota Noah.jpg';
+    if (c === 'pickup') return 'images/Toyota.jpeg';
+    if (c === 'luxury') return 'images/s class.jpeg';
+    if (c === 'sedan' || c === 'hatchback') return 'images/Sedan car.jpg';
+    if (b.includes('toyota')) return 'images/Toyota.jpeg';
+    return 'images/car logo.png';
+}
+window.getCarImage = getCarImage;
+function getCarImage(brand, model, category) {
+    const m = (model || '').toLowerCase().trim();
+    const b = (brand || '').toLowerCase().trim();
+    const c = (category || '').toLowerCase().trim();
+    const map = {
+        'noah': 'images/Toyota Noah.jpg',
+        'alphard': 'images/Alphard.jpeg',
+        'rav4': 'images/Rav 4.jpeg',
+        'rav 4': 'images/Rav 4.jpeg',
+        'land cruiser': 'images/Land cruiser.jpg',
+        'landcruiser': 'images/Land cruiser.jpg',
+        'hilux': 'images/Hilux.jpg',
+        'hilux surf': 'images/Hilux Surf.jpg',
+        'harrier': 'images/Harrier.jpg',
+        'kluger': 'images/Kruger.jpg',
+        'vanguard': 'images/Vangurad Toyota.jpg',
+        'auris': 'images/Auris.jpg',
+        'avensis': 'images/Toyota Avensis.jpg',
+        'allex': 'images/Toyota Allex.jpg',
+        'fielder': 'images/Toyota Fielder.jpg',
+        'fortuner': 'images/Toyota Fortuner.jpg',
+        'hiace': 'images/Toyota Hiace.jpg',
+        'isis': 'images/Toyota Isis.jpg',
+        'rumion': 'images/Rumion.jpg',
+        'spacio': 'images/Spacio.jpg',
+        'runx': 'images/Toyota Runx.jpg',
+        'wrangler': 'images/jeep wrangler.jpg',
+        'grand cherokee': 'images/Jeep Grand Cherokee.jpg',
+        's500': 'images/s class.jpeg',
+        's class': 'images/s class.jpeg',
+        's-class': 'images/s class.jpeg'
+    };
+    if (map[m]) return map[m];
+    if (m === 'xf' && b.includes('jaguar')) return 'images/Jaguar xf 2015.jpg';
+    if (b.includes('jeep')) {
+        if (m.includes('wrangler')) return 'images/jeep wrangler.jpg';
+        if (m.includes('grand cherokee')) return 'images/Jeep Grand Cherokee.jpg';
+    }
+    if (c === 'suv') return 'images/Rav 4.jpeg';
+    if (c === 'minivan') return 'images/Toyota Noah.jpg';
+    if (c === 'pickup') return 'images/Toyota.jpeg';
+    if (c === 'luxury') return 'images/s class.jpeg';
+    if (c === 'sedan' || c === 'hatchback') return 'images/Sedan car.jpg';
+    if (b.includes('toyota')) return 'images/Toyota.jpeg';
+    return 'images/car logo.png';
+}
+window.getCarImage = getCarImage;
+// Set minimum date to today
+const today = new Date().toISOString().split('T')[0];
+startDateInput.setAttribute('min', today);
+endDateInput.setAttribute('min', today);
+
+// Update end date minimum when start date changes
+startDateInput.addEventListener('change', () => {
+    if (startDateInput.value) {
+        const startDate = new Date(startDateInput.value);
+        startDate.setDate(startDate.getDate() + 1);
+        endDateInput.setAttribute('min', startDate.toISOString().split('T')[0]);
+        
+        // If end date is before new minimum, clear it
+        if (endDateInput.value && endDateInput.value < endDateInput.getAttribute('min')) {
+            endDateInput.value = '';
+        }
+    }
+});
+
+// Load and display all cars from the API
+// This shows ALL vehicles (both available and unavailable) so admins can see the complete fleet
+async function loadCars() {
+    try {
+        const response = await fetch(`${API_BASE}/cars`);
+        allCars = await response.json();
+        
+        // Extract unique categories
+        categories = [...new Set(allCars.map(car => car.category || 'Other').filter(cat => cat))].sort();
+        
+        // Sort cars: available first, then unavailable
+        allCars.sort((a, b) => {
+            if (a.isAvailable === b.isAvailable) return 0;
+            return a.isAvailable ? -1 : 1;
+        });
+        if (isHome) {
+            const MAX_HOME_CARS = 12;
+            allCars = allCars.slice(0, MAX_HOME_CARS);
+            categories = [...new Set(allCars.map(car => car.category || 'Other').filter(cat => cat))].sort();
+            selectedCategory = null;
+        }
+        
+        renderCategoryFilters();
+        renderCars();
+        const exploreBtn = document.getElementById('exploreFleetBtn');
+        if (exploreBtn && isHome) {
+            exploreBtn.addEventListener('click', () => {
+                selectedCategory = 'SUV';
+                document.querySelectorAll('.category-filter').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.category === selectedCategory);
+                });
+                renderCars();
+            });
+        }
+    } catch (error) {
+        console.error('Error loading cars:', error);
+        document.getElementById('vehiclesByCategory').innerHTML = '<div class="error-state">Error loading vehicles. Please refresh the page.</div>';
+        showToast('Error', 'Failed to load vehicles. Please try again later.');
+    }
+}
+
+// Render category filter buttons
+function renderCategoryFilters() {
+    const filtersContainer = document.getElementById('categoryFilters');
+    filtersContainer.innerHTML = '';
+    if (!isHome) {
+        const allBtn = document.createElement('button');
+        allBtn.className = 'category-filter active';
+        allBtn.dataset.category = 'all';
+        allBtn.textContent = 'All Vehicles';
+        allBtn.addEventListener('click', () => {
+            selectedCategory = 'all';
+            document.querySelectorAll('.category-filter').forEach(btn => btn.classList.remove('active'));
+            allBtn.classList.add('active');
+            renderCars();
+        });
+        filtersContainer.appendChild(allBtn);
+    }
+    
+    // Add category buttons
+    categories.forEach(category => {
+        const button = document.createElement('button');
+        button.className = 'category-filter';
+        button.dataset.category = category;
+        button.textContent = category;
+        button.addEventListener('click', () => {
+            selectedCategory = category;
+            document.querySelectorAll('.category-filter').forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            renderCars();
+        });
+        filtersContainer.appendChild(button);
+    });
+}
+
+// Render cars grouped by category
+function renderCars() {
+    const container = document.getElementById('vehiclesByCategory');
+    
+    if (allCars.length === 0) {
+        container.innerHTML = '<div class="empty-state">No vehicles available at the moment. Please check back later.</div>';
+        return;
+    }
+
+    if (isHome && !selectedCategory) {
+        container.innerHTML = '<div class="empty-state">Select a category to view available vehicles.</div>';
+        return;
+    }
+
+    // Filter cars by selected category
+    let filteredCars = allCars;
+    if (selectedCategory && selectedCategory !== 'all') {
+        filteredCars = allCars.filter(car => (car.category || 'Other') === selectedCategory);
+        if (isHome) {
+            filteredCars = filteredCars.slice(0, 12);
+        }
+    }
+    
+    if (filteredCars.length === 0) {
+        container.innerHTML = `<div class="empty-state">No vehicles found in the "${selectedCategory}" category.</div>`;
+        return;
+    }
+    
+    // Group cars by category
+    const carsByCategory = {};
+    filteredCars.forEach(car => {
+        const category = car.category || 'Other';
+        if (!carsByCategory[category]) {
+            carsByCategory[category] = [];
+        }
+        carsByCategory[category].push(car);
+    });
+    
+    // Render grouped by category
+    let html = '';
+    Object.keys(carsByCategory).sort().forEach(category => {
+        const categoryCars = carsByCategory[category];
+        const availableCount = categoryCars.filter(c => c.isAvailable).length;
+        const totalCount = categoryCars.length;
+        
+        html += `
+            <div class="category-group">
+                <div class="category-header">
+                    <h3 class="category-title">${category}</h3>
+                    <span class="category-count">${totalCount} vehicles (${availableCount} available)</span>
+                </div>
+                <div class="cars-grid">
+                    ${categoryCars.map(car => createCarCard(car)).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    // Add click handlers only when booking form exists (non-Home bookings page)
+    if (isBookingPage) {
+        document.querySelectorAll('.car-card-selectable').forEach(card => {
+            card.addEventListener('click', () => {
+                const carId = parseInt(card.dataset.carId);
+                selectCar(carId);
+                bookingForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+    }
+}
+
+// Create car card HTML
+function createCarCard(car) {
+    const isAvailable = car.isAvailable;
+    const availabilityClass = isAvailable ? 'available' : 'unavailable';
+    const availabilityText = isAvailable ? 'Available' : 'Unavailable';
+    
+    // Get car image using centralized resolver (images.js)
+    const carImage = (typeof window !== 'undefined' && window.getCarImage)
+        ? window.getCarImage(car.brand || '', car.model || '', car.category || '')
+        : 'images/car logo.png';
+    
+    return `
+        <div class="car-card-selectable ${availabilityClass}" data-car-id="${car.id}">
+            <div class="car-image-wrapper">
+                <img src="${carImage}" alt="${car.brand} ${car.model}" class="car-image" onerror="this.src='images/car logo.png'">
+                <div class="car-badge ${availabilityClass}">${availabilityText}</div>
+                ${!isAvailable ? '<div class="unavailable-overlay">Currently Booked</div>' : ''}
+            </div>
+            <div class="car-content">
+                <h3 class="car-name">${car.brand} ${car.model}</h3>
+                <p class="car-plate">${car.numberPlate}</p>
+                <div class="car-details">
+                    <span class="car-detail-item">${car.seats} Seats</span>
+                    <span class="car-detail-item">UGX ${car.dailyRate.toLocaleString()}/day</span>
+                </div>
+                ${isAvailable && isBookingPage ? '<button class="select-car-btn">Select for Booking</button>' : ''}
+                ${isHome ? '<a href="Bookings.html" class="select-car-link">View on Bookings</a>' : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Select a car for booking
+function selectCar(carId) {
+    const car = allCars.find(c => c.id === carId);
+    
+    if (!car) {
+        showToast('Error', 'Car not found.');
+        return;
+    }
+    
+    if (!car.isAvailable) {
+        showToast('Error', 'This vehicle is currently unavailable for booking.');
+        return;
+    }
+    
+    selectedCar = car;
+    
+    // Update form fields
+    carSelect.value = `${car.brand} ${car.model} - ${car.numberPlate}`;
+    selectedCarIdInput.value = car.id;
+    carInfo.textContent = `${car.seats} seater vehicle - UGX ${car.dailyRate.toLocaleString()} per day`;
+    carInfo.style.display = 'block';
+    
+    // Update visual selection
+    document.querySelectorAll('.car-card-selectable').forEach(card => {
+        card.classList.remove('selected');
+    });
+    document.querySelector(`[data-car-id="${carId}"]`).classList.add('selected');
+    
+    showToast('Car Selected', `You've selected ${car.brand} ${car.model}. Please fill in the booking details below.`);
+}
+
+// Handle form submission
+bookingForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(bookingForm);
+    const customerName = formData.get('customerName').trim();
+    const carId = selectedCarIdInput.value;
+    const startDate = formData.get('startDate');
+    const endDate = formData.get('endDate');
+    
+    // Validation
+    if (!customerName || !carId || !startDate || !endDate) {
+        showToast('Error', 'Please fill in all required fields and select a vehicle.');
+        return;
+    }
+    
+    // Validate dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (start < today) {
+        showToast('Error', 'Start date cannot be in the past.');
+        return;
+    }
+    
+    if (end <= start) {
+        showToast('Error', 'End date must be after start date.');
+        return;
+    }
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    submitText.classList.add('hidden');
+    submitLoader.classList.remove('hidden');
+    
+    try {
+        const response = await fetch(`${API_BASE}/bookings`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                carId: parseInt(carId),
+                customerName: customerName,
+                startDate: startDate,
+                endDate: endDate
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('Success', `Booking submitted successfully! Your booking ID is #${result.booking.id}. We'll contact you shortly to confirm.`);
+            bookingForm.reset();
+            selectedCar = null;
+            selectedCarIdInput.value = '';
+            carSelect.value = '';
+            carInfo.style.display = 'none';
+            
+            // Reload cars to update availability
+            await loadCars();
+            
+            // Clear selection
+            document.querySelectorAll('.car-card-selectable').forEach(card => {
+                card.classList.remove('selected');
+            });
+        } else {
+            showToast('Error', result.error || 'Failed to submit booking. Please try again.');
+        }
+    } catch (error) {
+        console.error('Error submitting booking:', error);
+        showToast('Error', 'Failed to submit booking. Please check your connection and try again.');
+    } finally {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitText.classList.remove('hidden');
+        submitLoader.classList.add('hidden');
+    }
+});
+
+// Show toast notification
+function showToast(title, message) {
+    toastTitle.textContent = title;
+    toastMessage.textContent = message;
+    toast.classList.add('show');
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 5000);
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadCars();
+});

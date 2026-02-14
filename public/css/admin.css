@@ -1,0 +1,909 @@
+/* ===== ADMIN DASHBOARD STYLES ===== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+/* Main Content */
+.admin-main-content {
+    padding: 2rem 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    gap: 1rem;
+}
+
+.dashboard-header > div:first-child {
+    flex: 1;
+}
+
+.dashboard-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #1a2332;
+}
+
+.dashboard-subtitle {
+    font-size: 1rem;
+    color: #666;
+}
+
+.add-vehicle-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.add-vehicle-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.tab {
+    background: none;
+    border: none;
+    color: #666;
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+    position: relative;
+    top: 2px;
+}
+
+.tab:hover {
+    color: #1a2332;
+}
+
+.tab.active {
+    color: #ff9800;
+    border-bottom-color: #ff9800;
+}
+
+/* Content Containers */
+.content-container {
+    margin-top: 1rem;
+}
+
+/* Inner Tabs */
+.tabs-inner {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.tab-inner {
+    background: none;
+    border: none;
+    color: #666;
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+    position: relative;
+    top: 2px;
+}
+
+.tab-inner:hover {
+    color: #1a2332;
+}
+
+.tab-inner.active {
+    color: #ff9800;
+    border-bottom-color: #ff9800;
+}
+
+/* Bookings Container */
+.bookings-container {
+    margin-top: 1rem;
+}
+
+.bookings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.booking-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1.5rem;
+    align-items: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.booking-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: #ff9800;
+}
+
+.booking-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.vehicle-info h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: #1a2332;
+}
+
+.vehicle-info .license-plate {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.booking-status {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.booking-status.confirmed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.booking-status.completed {
+    background: #cfe2ff;
+    color: #084298;
+}
+
+.booking-status.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.booking-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.booking-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.booking-detail label {
+    font-size: 0.85rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.booking-detail span {
+    font-size: 1rem;
+    color: #1a2332;
+}
+
+.booking-actions {
+    margin-top: 1rem;
+}
+
+.mark-returned-btn {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.mark-returned-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+}
+
+/* Vehicles Grid */
+.vehicles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.vehicle-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.vehicle-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-color: #ff9800;
+    transform: translateY(-4px);
+}
+
+.vehicle-header {
+    padding: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.vehicle-header h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #1a2332;
+    margin-bottom: 0.25rem;
+}
+
+.vehicle-plate {
+    color: #666;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.vehicle-category {
+    display: inline-block;
+    background: #f0f0f0;
+    color: #666;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+}
+
+.vehicle-status {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.vehicle-status.available {
+    background: #d4edda;
+    color: #155724;
+}
+
+.vehicle-status.unavailable {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.vehicle-details {
+    padding: 0 1.5rem 1rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.vehicle-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.vehicle-detail label {
+    font-size: 0.8rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.vehicle-detail span {
+    font-size: 0.95rem;
+    color: #1a2332;
+}
+
+.vehicle-actions {
+    padding: 1rem 1.5rem;
+    display: flex;
+    gap: 0.75rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.toggle-availability-btn,
+.delete-vehicle-btn {
+    flex: 1;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.toggle-availability-btn {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.toggle-availability-btn:hover {
+    background: #bbdefb;
+}
+
+.toggle-availability-btn.unavailable {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.delete-vehicle-btn {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.delete-vehicle-btn:hover {
+    background: #f5c6cb;
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.modal-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1a2332;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 2rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.close-btn:hover {
+    color: #1a2332;
+    background-color: #f0f0f0;
+}
+
+.modal-description {
+    color: #666;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #1a2332;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: #f9f9f9;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    color: #1a2332;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #ff9800;
+    background-color: white;
+    box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.1);
+}
+
+.form-group input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.form-group input[type="number"]::-webkit-outer-spin-button,
+.form-group input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+}
+
+.form-hint {
+    display: block;
+    margin-top: 0.5rem;
+    color: #999;
+    font-size: 0.85rem;
+}
+
+.submit-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    color: white;
+    border: none;
+    padding: 0.875rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    margin-top: 1rem;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+}
+
+/* Toast Notification */
+.toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: white;
+    border-left: 4px solid #ff9800;
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    min-width: 300px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    transform: translateX(400px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 2000;
+}
+
+.toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.toast-content strong {
+    display: block;
+    color: #1a2332;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.toast-content p {
+    color: #666;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #999;
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+}
+
+.empty-state p {
+    font-size: 1.1rem;
+}
+
+/* Pagination */
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+    margin-top: 2rem;
+    padding: 1.5rem;
+}
+
+.pagination-btn {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.pagination-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+}
+
+.pagination-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.5;
+    box-shadow: none;
+}
+
+.pagination-info {
+    color: #666;
+    font-weight: 600;
+}
+
+.loading-state {
+    text-align: center;
+    padding: 2rem;
+    color: #999;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .admin-main-content {
+        padding: 1rem;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+    }
+
+    .dashboard-title {
+        font-size: 1.5rem;
+    }
+
+    .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tab {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    .booking-card,
+    .vehicle-card {
+        grid-template-columns: 1fr;
+    }
+
+    .booking-details {
+        grid-template-columns: 1fr;
+    }
+
+    .vehicles-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-content {
+        max-width: 90%;
+        padding: 1.5rem;
+    }
+
+    .pagination-container {
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+}
+
+
+/* ===== FONT AWESOME ICON STYLING FOR ADMIN ===== */
+
+/* Dashboard header icons */
+.dashboard-title i {
+    margin-right: 0.75rem;
+    color: #ff9800;
+}
+
+/* Tab icons */
+.tab i {
+    margin-right: 0.5rem;
+    color: #ff9800;
+}
+
+.tab.active i {
+    color: #ff9800;
+}
+
+/* Navigation icons */
+.nav-link i {
+    margin-right: 0.5rem;
+    width: 18px;
+    text-align: center;
+}
+
+.logout-link i {
+    margin-right: 0.5rem;
+}
+
+/* KYC card icons */
+.kyc-card-name i {
+    margin-right: 0.5rem;
+    color: #ff9800;
+}
+
+/* Modal header icons */
+.modal-header h2 i {
+    margin-right: 0.75rem;
+    color: #ff9800;
+}
+
+/* Detail section icons */
+.kyc-detail-section h3 i {
+    margin-right: 0.75rem;
+    color: #ff9800;
+}
+
+/* Document verification icons */
+.document-verification-item h4 i {
+    margin-right: 0.5rem;
+    color: #ff9800;
+}
+
+/* Button icons */
+.approve-btn i,
+.reject-btn i,
+.submit-btn i,
+.cancel-btn i,
+.download-btn i,
+.view-btn i {
+    margin-right: 0.5rem;
+}
+
+/* Verification note icon */
+.verification-note i {
+    margin-right: 0.5rem;
+    color: #2196f3;
+}
+
+/* Toast notification icon */
+.toast-content i {
+    margin-right: 1rem;
+    font-size: 1.2rem;
+    color: #ff9800;
+}
+
+/* Icon animations */
+@keyframes iconSpin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-state i {
+    animation: iconSpin 2s linear infinite;
+}
+
+/* Responsive icon sizing */
+@media (max-width: 768px) {
+    .dashboard-title i {
+        font-size: 1.5rem;
+    }
+    
+    .tab i {
+        font-size: 1rem;
+    }
+    
+    .modal-header h2 i {
+        font-size: 1.5rem;
+    }
+    
+    .kyc-detail-section h3 i {
+        font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .dashboard-title i {
+        font-size: 1.3rem;
+    }
+    
+    .tab i {
+        font-size: 0.9rem;
+    }
+}
+
+
+/* ===== FILE INPUT STYLING ===== */
+
+.file-input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.file-input {
+    position: absolute;
+    width: 0.1px;
+    height: 0.1px;
+    opacity: 0;
+    overflow: hidden;
+    z-index: -1;
+}
+
+.file-input-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    background: #f9f9f9;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.file-input-label:hover {
+    border-color: #ff9800;
+    background: #fff9f0;
+}
+
+.file-input:focus + .file-input-label {
+    border-color: #ff9800;
+    box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.1);
+}
+
+.file-input-icon {
+    font-size: 2.5rem;
+    color: #ff9800;
+    margin-bottom: 0.75rem;
+}
+
+.file-input-text {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a2332;
+    margin-bottom: 0.5rem;
+}
+
+.file-input-hint {
+    font-size: 0.85rem;
+    color: #999;
+}
+
+.file-input-preview {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.file-input-preview img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.file-input-filename {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
+}
+
+/* Active state when file is selected */
+.file-input-label.has-file {
+    border-color: #4caf50;
+    background: #f1f8f4;
+}
+
+.file-input-label.has-file .file-input-icon {
+    color: #4caf50;
+}
+
+
+/* ===== VEHICLE CARD IMAGE STYLING ===== */
+
+.vehicle-card .vehicle-image-container {
+    width: 100%;
+    height: 180px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 1rem;
+}
+
+.vehicle-card .vehicle-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transition: transform 0.3s ease;
+}
+
+.vehicle-card:hover .vehicle-image {
+    transform: scale(1.05);
+}
