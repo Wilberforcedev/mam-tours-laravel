@@ -9,6 +9,7 @@ use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\KycController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\HealthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -44,6 +45,10 @@ Route::get('/faqs', function () {
 
 // Public API routes
 Route::get('/api/reviews', [ReviewController::class, 'getApprovedReviews']);
+
+// Health check endpoints
+Route::get('/health', [HealthController::class, 'index']);
+Route::get('/ping', [HealthController::class, 'ping']);
 
 // Authentication routes
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
