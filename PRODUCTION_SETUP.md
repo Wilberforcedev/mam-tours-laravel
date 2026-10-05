@@ -20,7 +20,7 @@ PRE-DEPLOYMENT CHECKLIST
 □ Update database credentials in .env
 □ Run migrations: php artisan migrate --force
 □ Seed initial data: php artisan db:seed (optional)
-□ Create admin user: php artisan admin:create "Admin Name" wilberofficial2001@gmail.com "secure_password"
+□ Create admin user: php artisan admin:create "Admin Name" admin@example.com
 
 3. File Storage
 
@@ -88,7 +88,7 @@ Alternative: Twilio
 □ Generate strong WEBHOOK_SECRET
 □ Enable HTTPS/SSL certificate
 □ Set up firewall rules
-□ Change default admin password immediately
+□ Create the admin account with a unique password through the hidden prompt
 
 8. Performance Optimization
 
@@ -196,7 +196,7 @@ First Time Deployment
 
   php artisan migrate --force
   php artisan db:seed
-  php artisan admin:create "Admin Name" wilberofficial2001@gmail.com "password"
+  php artisan admin:create "Admin Name" admin@example.com
 
 5. Set permissions
 
