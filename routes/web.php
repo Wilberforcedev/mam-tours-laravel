@@ -89,9 +89,6 @@ Route::middleware('auth')->group(function () {
     Route::post('/payments/{booking}/mobile-money', [PaymentController::class, 'processMobileMoney'])->name('payments.mobile-money');
     Route::get('/invoices/{booking}', [PaymentController::class, 'generateInvoice'])->name('invoices.download');
 
-    // Webhook routes (outside auth middleware)
-    Route::post('/webhooks/mobile-money', [PaymentController::class, 'mobileMoneyWebhook'])->name('webhooks.mobile-money');
-
     // Admin routes
     Route::middleware('admin')->group(function () {
         // KYC Admin routes
@@ -150,6 +147,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/chart-data', [\App\Http\Controllers\AnalyticsController::class, 'chartData'])->name('chart-data');
     });
 });
+
+// Provider callbacks authenticate with an HMAC signature, not a browser session.
+Route::post('/webhooks/mobile-money', [PaymentController::class, 'mobileMoneyWebhook'])->name('webhooks.mobile-money');
 
 // Serve static files (for compatibility with existing JS)
 Route::get('/Home.html', function () {

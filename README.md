@@ -8,7 +8,7 @@ This isn't just another booking system. Here's what makes it tick:
 
 - **Easy Sign-Up & Login**: Get customers registered and verified with ID upload (just like Jumia does it)
 - **Smart Booking**: Real-time availability, instant pricing, and a booking flow that actually works
-- **Flexible Payments**: Accept cards via Stripe, MTN Mobile Money, Airtel Money, bank transfers, or good old cash
+- **Flexible Payments**: Stripe card processing is supported; mobile money initiation is currently simulated and needs a real provider integration before production use
 - **Admin Control**: Manage everything from one dashboard - bookings, cars, customers, verifications, reviews
 - **Stay Connected**: Automatic email and SMS notifications keep everyone in the loop
 - **Customer Reviews**: Let your customers share their experience
@@ -105,6 +105,10 @@ Need more details? Check out `RAILWAY_DEPLOYMENT.md` for the full walkthrough.
 
 **Payments**
 
+Stripe can process card payments when valid Stripe keys and webhook settings are configured. Mobile money initiation is currently simulated; do not treat it as a live MTN or Airtel integration.
+
+The mobile money callback endpoint is `POST /webhooks/mobile-money`. It accepts callbacks only when `WEBHOOK_SECRET` is configured, and requires `X-Webhook-Signature` to be the lowercase hexadecimal HMAC-SHA256 of the exact raw request body. Configure the same long random secret on the trusted callback sender. Callbacks without a valid signature are rejected, and repeated successful callbacks do not send duplicate payment notifications.
+
 You'll want to get your payment providers sorted:
 - **Stripe**: Grab your API keys from https://stripe.com (handles card payments)
 - **Mobile Money**: Set up MTN and Airtel Money credentials
@@ -175,11 +179,13 @@ php artisan test --coverage             # See what's covered
 
 ## First Time Setup
 
-After running the seeder, you'll have a default admin account:
-- Email: wilberofficial2001@gmail.com
-- Password: password
+The database seeder does not create admin or demo-user accounts. Create an administrator from a trusted application shell; the password is entered through a hidden prompt:
 
-**Important**: Change this password immediately in production!
+```bash
+php artisan admin:create "MAM Tours Admin" admin@example.com
+```
+
+If this installation previously ran an older seeder, change or remove any demo accounts that were created at that time.
 
 ## Security
 

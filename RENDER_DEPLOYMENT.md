@@ -95,7 +95,7 @@ MAIL_PASSWORD=null
 MAIL_ENCRYPTION=null
 MAIL_FROM_ADDRESS=noreply@mamtours.com
 MAIL_FROM_NAME=MAM Tours
-MAIL_ADMIN_EMAIL=wilberofficial2001@gmail.com
+MAIL_ADMIN_EMAIL=admin@example.com
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -112,12 +112,12 @@ Your app will be live at: https://mam-tours.onrender.com
 
 STEP 7: POST-DEPLOYMENT SETUP
 
-Once deployed, you need to create your admin account.
+Once deployed, create your admin account from the service shell. The command prompts for the password without displaying it.
 
 Option A: Using Render Shell
 1. Go to your web service dashboard
 2. Click "Shell" tab
-3. Run: php artisan admin:create "Your Name" wilberofficial2001@gmail.com "your_password"
+3. Run: php artisan admin:create "Your Name" admin@example.com
 
 Option B: Using SSH (if available)
 1. Connect via SSH

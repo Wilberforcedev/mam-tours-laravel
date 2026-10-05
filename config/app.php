@@ -56,6 +56,9 @@ return [
 
     'asset_url' => env('ASSET_URL', null),
 
+    // Shared secret used to authenticate inbound application webhooks.
+    'webhook_secret' => env('WEBHOOK_SECRET'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
