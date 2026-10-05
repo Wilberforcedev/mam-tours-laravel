@@ -68,7 +68,7 @@ CACHE_DRIVER=file
 QUEUE_CONNECTION=sync
 
 MAIL_FROM_ADDRESS=noreply@mamtours.com
-MAIL_ADMIN_EMAIL=wilberofficial2001@gmail.com
+MAIL_ADMIN_EMAIL=admin@example.com
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
