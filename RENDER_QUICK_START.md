@@ -84,7 +84,9 @@ After deployment, use Render Shell:
 
 1. Go to your service dashboard
 2. Click "Shell" tab
-3. Run: php artisan admin:create "Your Name" wilberofficial2001@gmail.com "password"
+3. Run: php artisan admin:create "Your Name" admin@example.com
+The command prompts for the password without displaying it.
+
 4. Run: php artisan db:seed --class=CarsSeeder
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
