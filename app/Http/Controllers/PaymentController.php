@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Booking;
 use App\Services\PaymentService;
 use App\Services\NotificationService;
+use App\Services\WebhookService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
@@ -13,11 +15,13 @@ class PaymentController extends Controller
 {
     private PaymentService $paymentService;
     private NotificationService $notificationService;
+    private WebhookService $webhookService;
 
-    public function __construct(PaymentService $paymentService, NotificationService $notificationService)
+    public function __construct(PaymentService $paymentService, NotificationService $notificationService, WebhookService $webhookService)
     {
         $this->paymentService = $paymentService;
         $this->notificationService = $notificationService;
+        $this->webhookService = $webhookService;
     }
 
     /**
@@ -169,26 +173,57 @@ class PaymentController extends Controller
      */
     public function mobileMoneyWebhook(Request $request)
     {
-        // Validate webhook signature in production
-        $transactionId = $request->input('transaction_id');
-        $status = $request->input('status');
-        
-        if ($status === 'completed') {
-            $booking = Booking::where('payment->transaction_id', $transactionId)->first();
-            
-            if ($booking) {
-                $booking->update([
-                    'payment_status' => 'completed',
-                    'payment' => array_merge($booking->payment ?? [], [
-                        'completed_at' => now(),
-                        'webhook_received_at' => now(),
-                    ]),
-                ]);
+        $secret = config('app.webhook_secret');
+        $signature = $request->header('X-Webhook-Signature');
 
-                // Send payment confirmation notification
-                $this->notificationService->sendPaymentConfirmation($booking);
-            }
+        if (!$secret) {
+            return response()->json(['error' => 'Webhook is not configured'], 503);
         }
+
+        if (!$signature || !$this->webhookService->verifySignature($request->getContent(), $signature, $secret)) {
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'transaction_id' => 'required|string|max:255',
+            'status' => 'required|in:pending,completed,failed,cancelled',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => 'Invalid webhook payload'], 422);
+        }
+
+        if ($request->input('status') !== 'completed') {
+            return response()->json(['status' => 'received']);
+        }
+
+        $booking = DB::transaction(function () use ($request) {
+            $booking = Booking::where('payment->transaction_id', $request->input('transaction_id'))
+                ->where('payment_method', 'mobile_money')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$booking || $booking->payment_status !== 'pending') {
+                return null;
+            }
+
+            $payment = $booking->payment ?? [];
+            $payment['completed_at'] = now();
+            $payment['webhook_received_at'] = now();
+
+            $booking->update([
+                'payment_status' => 'completed',
+                'payment' => $payment,
+            ]);
+
+            return $booking;
+        });
+
+        if (!$booking) {
+            return response()->json(['status' => 'received']);
+        }
+
+        $this->notificationService->sendPaymentConfirmation($booking);
 
         return response()->json(['status' => 'received']);
     }
