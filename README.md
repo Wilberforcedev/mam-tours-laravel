@@ -175,11 +175,13 @@ php artisan test --coverage             # See what's covered
 
 ## First Time Setup
 
-After running the seeder, you'll have a default admin account:
-- Email: wilberofficial2001@gmail.com
-- Password: password
+The database seeder does not create admin or demo-user accounts. Create an administrator from a trusted application shell; the password is entered through a hidden prompt:
 
-**Important**: Change this password immediately in production!
+```bash
+php artisan admin:create "MAM Tours Admin" admin@example.com
+```
+
+If this installation previously ran an older seeder, change or remove any demo accounts that were created at that time.
 
 ## Security
 
