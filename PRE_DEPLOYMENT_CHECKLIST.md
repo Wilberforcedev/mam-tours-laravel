@@ -70,7 +70,7 @@ SECURITY
 □ Strong APP_KEY generated
 □ HTTPS/SSL certificate ready
 □ SESSION_SECURE_COOKIE=true (requires HTTPS)
-□ Default admin password will be changed immediately
+□ No default admin account is seeded
 □ Webhook secrets generated
 □ CORS settings configured
 
@@ -135,8 +135,8 @@ Once everything above is checked:
 
 3. After deployment
 
-  Create admin user (via Railway CLI or dashboard):
-  php artisan admin:create "Admin Name" wilberofficial2001@gmail.com "secure_password"
+  Create admin user (via the service shell; enter its password at the hidden prompt):
+  php artisan admin:create "Admin Name" admin@example.com
   
   Seed cars (optional):
   php artisan db:seed --class=CarsSeeder
