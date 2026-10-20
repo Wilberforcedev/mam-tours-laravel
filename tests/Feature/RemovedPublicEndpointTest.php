@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class RemovedPublicEndpointTest extends TestCase
@@ -12,8 +11,6 @@ class RemovedPublicEndpointTest extends TestCase
         $this->postJson('/api/payments/intent')->assertNotFound();
         $this->postJson('/api/payments/capture/1')->assertNotFound();
         $this->postJson('/api/payments/refund/1')->assertNotFound();
-        $this->postJson('/api/test-upload', [
-            'file' => UploadedFile::fake()->image('test.jpg'),
-        ])->assertNotFound();
+        $this->postJson('/api/test-upload')->assertNotFound();
     }
 }
