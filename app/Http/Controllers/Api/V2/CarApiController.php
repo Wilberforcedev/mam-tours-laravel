@@ -105,8 +105,8 @@ class CarApiController extends Controller
             'min_seats' => 'nullable|integer|min:1',
             'max_seats' => 'nullable|integer|max:50',
             'category' => 'nullable|string|max:50',
-            'available_from' => 'nullable|date',
-            'available_to' => 'nullable|date|after:available_from',
+            'available_from' => 'nullable|required_with:available_to|date',
+            'available_to' => 'nullable|required_with:available_from|date|after:available_from',
         ]);
 
         $query = Car::where('isAvailable', true);
@@ -137,6 +137,22 @@ class CarApiController extends Controller
 
         if (isset($validated['category'])) {
             $query->where('category', $validated['category']);
+        }
+
+        if (isset($validated['available_from'], $validated['available_to'])) {
+            $query->whereNotExists(function ($bookings) use ($validated) {
+                $bookings->selectRaw('1')
+                    ->from('bookings')
+                    ->whereColumn('bookings.car_id', 'cars.id')
+                    ->whereIn('bookings.status', ['pending', 'reserved', 'confirmed', 'in_use'])
+                    ->where('bookings.startDate', '<', \Carbon\Carbon::parse($validated['available_to'])->startOfDay()->toDateTimeString())
+                    ->where('bookings.endDate', '>', \Carbon\Carbon::parse($validated['available_from'])->startOfDay()->toDateTimeString())
+                    ->where(function ($activeReservations) {
+                        $activeReservations->where('bookings.status', '!=', 'reserved')
+                            ->orWhereNull('bookings.expiresAt')
+                            ->orWhere('bookings.expiresAt', '>', now());
+                    });
+            });
         }
 
         $cars = $query->paginate(15);

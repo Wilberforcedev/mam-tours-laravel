@@ -12,7 +12,10 @@ class PaymentService
 {
     public function __construct()
     {
-        Stripe::setApiKey(config('services.stripe.secret'));
+        $secret = config('services.stripe.secret');
+        if ($secret) {
+            Stripe::setApiKey($secret);
+        }
     }
 
     /**
@@ -24,8 +27,8 @@ class PaymentService
             $amount = $this->calculateTotalAmount($booking);
             
             $paymentIntent = PaymentIntent::create([
-                'amount' => $amount * 100, // Stripe expects cents
-                'currency' => 'usd',
+                'amount' => (int) round($amount * 100), // Stripe represents UGX amounts with two decimal places
+                'currency' => 'ugx',
                 'metadata' => [
                     'booking_id' => $booking->id,
                     'user_id' => $booking->user_id,
@@ -47,7 +50,7 @@ class PaymentService
 
             return [
                 'success' => false,
-                'error' => $e->getMessage(),
+                'error' => 'Payment could not be processed. Please try again.',
             ];
         }
     }
@@ -101,9 +104,19 @@ class PaymentService
     public function confirmStripePayment(string $paymentIntentId, Booking $booking): bool
     {
         try {
-            $paymentIntent = PaymentIntent::retrieve($paymentIntentId);
-            
-            if ($paymentIntent->status === 'succeeded') {
+            $paymentIntent = $this->retrievePaymentIntent($paymentIntentId);
+            $expectedAmount = (int) round($this->calculateTotalAmount($booking) * 100);
+            $metadata = $paymentIntent->metadata ?? [];
+            $intentBookingId = is_array($metadata)
+                ? ($metadata['booking_id'] ?? null)
+                : ($metadata->booking_id ?? null);
+
+            if (
+                $paymentIntent->status === 'succeeded'
+                && (int) $paymentIntent->amount === $expectedAmount
+                && (string) $intentBookingId === (string) $booking->id
+                && strtoupper($paymentIntent->currency ?? '') === 'UGX'
+            ) {
                 $booking->update([
                     'payment_method' => 'stripe',
                     'payment_status' => 'completed',
@@ -129,17 +142,23 @@ class PaymentService
         }
     }
 
+    protected function retrievePaymentIntent(string $paymentIntentId)
+    {
+        return PaymentIntent::retrieve($paymentIntentId);
+    }
+
     /**
-     * Calculate total booking amount
+     * Calculate total booking amount, in UGX.
      */
     private function calculateTotalAmount(Booking $booking): float
     {
         $pricing = $booking->pricing ?? [];
-        $basePrice = $pricing['basePrice'] ?? 0;
-        $addOnsTotal = $pricing['addOnsTotal'] ?? 0;
-        $tax = $pricing['tax'] ?? 0;
-        
-        return $basePrice + $addOnsTotal + $tax;
+
+        if (is_string($pricing)) {
+            $pricing = json_decode($pricing, true) ?: [];
+        }
+
+        return (float) ($pricing['total'] ?? $booking->totalPrice ?? 0);
     }
 
     /**
@@ -169,7 +188,7 @@ class PaymentService
                     'error' => $e->getMessage(),
                 ]);
                 
-                return ['success' => false, 'error' => $e->getMessage()];
+                return ['success' => false, 'error' => 'Refund could not be processed. Please try again.'];
             }
         }
 
