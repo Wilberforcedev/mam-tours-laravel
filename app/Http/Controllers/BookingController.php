@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Services\NotificationService;
 use App\Services\AnalyticsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class BookingController extends Controller
@@ -75,7 +76,43 @@ class BookingController extends Controller
 
     public function index()
     {
-        return response()->json(Booking::all());
+        $user = auth()->user();
+        $bookings = $user->isAdmin()
+            ? Booking::with('car')->latest()->get()
+            : Booking::with('car')->where('user_id', $user->id)->latest()->get();
+
+        return response()->json($bookings);
+    }
+
+    private function findAccessibleBooking($id)
+    {
+        $query = Booking::query();
+
+        if (!auth()->user()->isAdmin()) {
+            $query->where('user_id', auth()->id());
+        }
+
+        return $query->find($id);
+    }
+
+    private function hasOverlappingBooking($carId, $startDate, $endDate)
+    {
+        return Booking::where('car_id', $carId)
+            ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->where('status', 'in_use')
+                    ->orWhere(function ($dateRange) use ($startDate, $endDate) {
+                        $dateRange
+                            ->where('startDate', '<', Carbon::parse($endDate)->startOfDay()->toDateTimeString())
+                            ->where('endDate', '>', Carbon::parse($startDate)->startOfDay()->toDateTimeString());
+                    });
+            })
+            ->where(function ($query) {
+                $query->where('status', '!=', 'reserved')
+                    ->orWhereNull('expiresAt')
+                    ->orWhere('expiresAt', '>', now());
+            })
+            ->exists();
     }
 
     public function store(Request $request)
@@ -106,11 +143,7 @@ class BookingController extends Controller
                 ], 422);
             }
 
-            $car = Car::find($validated['carId']);
-            if (!$car->isAvailable) {
-                return response()->json(['message' => 'Car is not available'], 400);
-            }
-
+            $car = Car::findOrFail($validated['carId']);
             $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], []);
 
             // Handle file upload
@@ -167,7 +200,27 @@ class BookingController extends Controller
                 $bookingData['user_id'] = $user->id;
             }
 
-            $booking = Booking::create($bookingData);
+            $booking = DB::transaction(function () use ($validated, &$pricing, &$car, &$bookingData) {
+                $car = Car::whereKey($validated['carId'])->lockForUpdate()->firstOrFail();
+
+                if (!$car->isAvailable || $this->hasOverlappingBooking(
+                    $car->id,
+                    $validated['startDate'],
+                    $validated['endDate']
+                )) {
+                    return null;
+                }
+
+                $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], []);
+                $bookingData['totalPrice'] = $pricing['total'];
+                $bookingData['pricing'] = json_encode($pricing);
+
+                return Booking::create($bookingData);
+            });
+
+            if (!$booking) {
+                return response()->json(['message' => 'Car is not available for the requested dates'], 409);
+            }
 
             // Track booking creation
             $this->analyticsService->trackBookingCreated($booking->id, [
@@ -190,9 +243,6 @@ class BookingController extends Controller
                 'at' => now(),
             ]);
 
-            // Mark car as unavailable
-            $car->update(['isAvailable' => false]);
-
             // Send admin notification about new booking
             $this->notificationService->sendAdminBookingNotification($booking);
 
@@ -212,7 +262,7 @@ class BookingController extends Controller
 
     public function show($id)
     {
-        $booking = Booking::find($id);
+        $booking = $this->findAccessibleBooking($id);
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
@@ -229,25 +279,40 @@ class BookingController extends Controller
             'addOns' => 'nullable|array',
         ]);
 
-        $car = Car::find($validated['carId']);
-        if (!$car->isAvailable) {
-            return response()->json(['error' => 'Car unavailable'], 400);
+        $booking = DB::transaction(function () use ($validated) {
+            $car = Car::whereKey($validated['carId'])->lockForUpdate()->firstOrFail();
+
+            if (!$car->isAvailable || $this->hasOverlappingBooking(
+                $car->id,
+                $validated['startDate'],
+                $validated['endDate']
+            )) {
+                return null;
+            }
+
+            $pricing = $this->computePrice(
+                $car,
+                $validated['startDate'],
+                $validated['endDate'],
+                $validated['addOns'] ?? []
+            );
+
+            return Booking::create([
+                'car_id' => $car->id,
+                'user_id' => auth()->id(),
+                'customerName' => $validated['customerName'],
+                'startDate' => $validated['startDate'],
+                'endDate' => $validated['endDate'],
+                'status' => 'reserved',
+                'pricing' => $pricing,
+                'addOns' => $validated['addOns'] ?? [],
+                'expiresAt' => now()->addMinutes(30),
+            ]);
+        });
+
+        if (!$booking) {
+            return response()->json(['error' => 'Car unavailable for the requested dates'], 409);
         }
-
-        $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], $validated['addOns'] ?? []);
-
-        $booking = Booking::create([
-            'car_id' => $validated['carId'],
-            'customerName' => $validated['customerName'],
-            'startDate' => $validated['startDate'],
-            'endDate' => $validated['endDate'],
-            'status' => 'reserved',
-            'pricing' => $pricing,
-            'addOns' => $validated['addOns'] ?? [],
-            'expiresAt' => now()->addMinutes(30),
-        ]);
-
-        $car->update(['isAvailable' => false]);
 
         AuditLog::create([
             'action' => 'booking.reserve',
@@ -260,7 +325,7 @@ class BookingController extends Controller
 
     public function confirm($id)
     {
-        $booking = Booking::find($id);
+        $booking = $this->findAccessibleBooking($id);
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
@@ -311,7 +376,7 @@ class BookingController extends Controller
 
     public function cancel($id)
     {
-        $booking = Booking::find($id);
+        $booking = $this->findAccessibleBooking($id);
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
@@ -323,8 +388,6 @@ class BookingController extends Controller
             'status' => 'canceled',
             'canceledAt' => now(),
         ]);
-
-        $booking->car->update(['isAvailable' => true]);
 
         // Send cancellation notification if user exists
         if ($booking->user_id) {
@@ -355,8 +418,6 @@ class BookingController extends Controller
             'status' => 'completed',
             'returnedAt' => now(),
         ]);
-
-        $booking->car->update(['isAvailable' => true]);
 
         // Send completion notification if user exists
         if ($booking->user_id) {

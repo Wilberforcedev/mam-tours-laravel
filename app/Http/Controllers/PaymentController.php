@@ -48,7 +48,7 @@ class PaymentController extends Controller
     public function processStripe(Request $request, Booking $booking)
     {
         $validator = Validator::make($request->all(), [
-            'payment_method_id' => 'required|string',
+            'payment_method_id' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -166,6 +166,27 @@ class PaymentController extends Controller
             'success' => false,
             'error' => $result['error'],
         ], 400);
+    }
+
+    /**
+     * Refund a booking through the configured payment provider.
+     * This action is exposed to administrators only.
+     */
+    public function refund(Booking $booking)
+    {
+        $result = $this->paymentService->processRefund($booking);
+
+        if (!$result['success']) {
+            return response()->json([
+                'success' => false,
+                'error' => $result['error'],
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'refund_id' => $result['refund_id'],
+        ]);
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Models\KycVerification;
 use App\Services\KycVerificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class KycApiController extends Controller
 {
@@ -87,12 +88,16 @@ class KycApiController extends Controller
                 ],
             ], 201);
         } catch (\Exception $e) {
+            Log::error('KYC submission failed', [
+                'user_id' => $request->user()->id,
+                'exception' => $e,
+            ]);
+
             return response()->json([
                 'version' => 'v2',
                 'error' => [
                     'code' => 'KYC_SUBMISSION_FAILED',
-                    'message' => 'Failed to submit KYC documents',
-                    'details' => $e->getMessage(),
+                    'message' => 'KYC submission failed. Please try again later.',
                 ],
             ], 500);
         }
