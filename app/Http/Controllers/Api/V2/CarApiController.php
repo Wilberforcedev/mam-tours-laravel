@@ -145,8 +145,14 @@ class CarApiController extends Controller
                     ->from('bookings')
                     ->whereColumn('bookings.car_id', 'cars.id')
                     ->whereIn('bookings.status', ['pending', 'reserved', 'confirmed', 'in_use'])
-                    ->where('bookings.startDate', '<', \Carbon\Carbon::parse($validated['available_to'])->startOfDay()->toDateTimeString())
-                    ->where('bookings.endDate', '>', \Carbon\Carbon::parse($validated['available_from'])->startOfDay()->toDateTimeString())
+                    ->where(function ($availability) use ($validated) {
+                        $availability->where('bookings.status', 'in_use')
+                            ->orWhere(function ($dateRange) use ($validated) {
+                                $dateRange
+                                    ->where('bookings.startDate', '<', \Carbon\Carbon::parse($validated['available_to'])->startOfDay()->toDateTimeString())
+                                    ->where('bookings.endDate', '>', \Carbon\Carbon::parse($validated['available_from'])->startOfDay()->toDateTimeString());
+                            });
+                    })
                     ->where(function ($activeReservations) {
                         $activeReservations->where('bookings.status', '!=', 'reserved')
                             ->orWhereNull('bookings.expiresAt')

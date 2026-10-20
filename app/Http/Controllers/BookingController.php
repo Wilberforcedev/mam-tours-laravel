@@ -99,8 +99,14 @@ class BookingController extends Controller
     {
         return Booking::where('car_id', $carId)
             ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
-            ->where('startDate', '<', Carbon::parse($endDate)->startOfDay()->toDateTimeString())
-            ->where('endDate', '>', Carbon::parse($startDate)->startOfDay()->toDateTimeString())
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->where('status', 'in_use')
+                    ->orWhere(function ($dateRange) use ($startDate, $endDate) {
+                        $dateRange
+                            ->where('startDate', '<', Carbon::parse($endDate)->startOfDay()->toDateTimeString())
+                            ->where('endDate', '>', Carbon::parse($startDate)->startOfDay()->toDateTimeString());
+                    });
+            })
             ->where(function ($query) {
                 $query->where('status', '!=', 'reserved')
                     ->orWhereNull('expiresAt')
