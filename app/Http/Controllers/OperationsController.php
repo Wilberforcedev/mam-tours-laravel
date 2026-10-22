@@ -237,6 +237,29 @@ class OperationsController extends Controller
         ]);
     }
 
+    public function transactionsIndex(Request $request)
+    {
+        $query = FinancialTransaction::with(['booking', 'user'])->latest();
+        if ($request->filled('booking_id')) $query->where('booking_id', (int) $request->input('booking_id'));
+        if ($request->filled('type')) $query->where('type', $request->input('type'));
+        if ($request->filled('status')) $query->where('status', $request->input('status'));
+        if ($request->filled('currency')) $query->where('currency', strtoupper($request->input('currency')));
+        if ($request->filled('from')) $query->whereDate('occurred_at', '>=', $request->input('from'));
+        if ($request->filled('to')) $query->whereDate('occurred_at', '<=', $request->input('to'));
+        return response()->json($query->paginate(min(100, max(1, (int) $request->input('per_page', 20)))));
+    }
+
+    public function transactionReceipt($id)
+    {
+        $transaction = FinancialTransaction::with(['booking.car', 'user'])->findOrFail($id);
+        if ($transaction->status !== 'completed') {
+            return response()->json(['message' => 'Receipts are available only for completed transactions.'], 422);
+        }
+        $pdf = app('dompdf.wrapper');
+        $pdf->loadView('invoices.transaction-receipt', compact('transaction'));
+        return $pdf->download('receipt-transaction-' . $transaction->id . '.pdf');
+    }
+
     public function recordFinancialTransaction(Request $request)
     {
         $data = $request->validate([
