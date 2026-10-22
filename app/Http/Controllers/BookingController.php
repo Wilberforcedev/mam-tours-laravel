@@ -89,6 +89,10 @@ class BookingController extends Controller
             // requests for this same vehicle serialize before checking date overlap.
             \Illuminate\Support\Facades\DB::beginTransaction();
             $car = Car::whereKey($validated['carId'])->lockForUpdate()->firstOrFail();
+            if (!$car->isAvailable) {
+                \Illuminate\Support\Facades\DB::rollBack();
+                return response()->json(['message' => 'Vehicle is currently out of service.'], 409);
+            }
             $overlap = Booking::where('car_id', $car->id)
                 ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
                 ->where('startDate', '<', $returnAt)
