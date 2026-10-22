@@ -79,26 +79,9 @@ class PaymentService
     /**
      * Process mobile money payment (MTN/Airtel)
      */
-    public function processMobileMoneyPayment(Booking $booking, string $phoneNumber): array
+    public function processMobileMoneyPayment(Booking $booking, string $phoneNumber, string $provider = 'mtn'): array
     {
-        try {
-            // Do not generate fake transaction references or imply a prompt was sent.
-            // Enable only after a real MTN/Airtel adapter and signed webhook are configured.
-            if (!config('services.mobile_money.enabled', false)) {
-                return ['success' => false, 'error' => 'Mobile money is not configured yet. No payment was initiated.'];
-            }
-            return ['success' => false, 'error' => 'No supported mobile-money provider adapter is configured. No payment was initiated.'];
-        } catch (\Exception $e) {
-            Log::error('Mobile money payment failed', [
-                'booking_id' => $booking->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return [
-                'success' => false,
-                'error' => 'Mobile money payment failed. Please try again.',
-            ];
-        }
+        return app(IntaSendPaymentService::class)->initiate($booking, $phoneNumber, $provider);
     }
 
     /**
