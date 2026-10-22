@@ -5,10 +5,9 @@ on:
   push:
     branches:
       - main
-      - hardening/production-readiness
 
 concurrency:
-  group: production-readiness-${{ github.ref }}
+  group: production-readiness-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
