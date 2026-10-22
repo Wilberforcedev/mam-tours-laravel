@@ -93,6 +93,9 @@ class PaymentService
     public function confirmStripePayment(string $paymentIntentId, Booking $booking): bool
     {
         try {
+            if (($booking->payment_method ?? $booking->paymentMethod) !== 'stripe') {
+                return false;
+            }
             $paymentIntent = PaymentIntent::retrieve($paymentIntentId);
             
             $expectedCurrency = strtolower((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
