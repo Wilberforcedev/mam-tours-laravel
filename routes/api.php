@@ -115,6 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Public Bookings API (unauthenticated users can submit bookings)
 Route::post('/bookings', [BookingController::class, 'store']);
+Route::middleware(['auth:sanctum', 'admin'])->get('/admin/bookings/{id}/identity-document', [BookingController::class, 'downloadIdentityDocument']);
 
 // Payment endpoints are deliberately unavailable until a real provider workflow
 // verifies amounts, currency, ownership, provider signatures, and final status.
