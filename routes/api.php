@@ -84,6 +84,9 @@ Route::get('/health', function() {
 // Images
 Route::get('/images', [CarController::class, 'getImages']);
 
+// Date-based availability and a customer-facing quotation.
+Route::get('/availability', [\App\Http\Controllers\AvailabilityController::class, 'check']);
+
 // Public Cars API (read-only)
 Route::get('/cars', [CarController::class, 'index']);
 Route::get('/cars/{id}', [CarController::class, 'show']);
