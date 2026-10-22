@@ -147,6 +147,7 @@ Route::middleware(['auth:sanctum', 'role:fleet'])->prefix('operations')->group(f
 Route::middleware(['auth:sanctum', 'role:finance'])->prefix('operations')->group(function () {
     Route::get('/reports/financial-summary', [\App\Http\Controllers\OperationsController::class, 'financialSummary']);
     Route::get('/reports/bookings', [\App\Http\Controllers\OperationsController::class, 'bookingsReport']);
+    Route::get('/reports/management-summary', [\App\Http\Controllers\OperationsController::class, 'managementSummary']);
     Route::post('/bookings/{id}/refund', [\App\Http\Controllers\OperationsController::class, 'refundBooking']);
 });
 
