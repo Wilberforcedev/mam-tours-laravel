@@ -13,7 +13,7 @@ class SendFleetMaintenanceReminders extends Command
     protected $signature = 'fleet:send-maintenance-reminders';
     protected $description = 'Notify fleet/admin staff about upcoming service and expiring documents';
 
-    public function handle(NotificationService $notifications)
+    public function handle()
     {
         $today = now()->toDateString();
         $horizon = now()->addDays(30)->toDateString();
@@ -28,13 +28,13 @@ class SendFleetMaintenanceReminders extends Command
         foreach ($records as $record) {
             $subject = 'Fleet reminder: ' . $record->car->brand . ' ' . $record->car->model . ' (record #' . $record->id . ')';
             $parts = [];
-            if ($record->scheduled_for && $record->scheduled_for->betweenIncluded(now()->startOfDay(), now()->addDays(30)->endOfDay())) {
+            if ($record->scheduled_for && $record->scheduled_for->gte(now()->startOfDay()) && $record->scheduled_for->lte(now()->addDays(30)->endOfDay())) {
                 $parts[] = 'Service/maintenance scheduled for ' . $record->scheduled_for->toDateString();
             }
-            if ($record->insurance_expiry && $record->insurance_expiry->betweenIncluded(now()->startOfDay(), now()->addDays(30)->endOfDay())) {
+            if ($record->insurance_expiry && $record->insurance_expiry->gte(now()->startOfDay()) && $record->insurance_expiry->lte(now()->addDays(30)->endOfDay())) {
                 $parts[] = 'Insurance expires on ' . $record->insurance_expiry->toDateString();
             }
-            if ($record->licence_expiry && $record->licence_expiry->betweenIncluded(now()->startOfDay(), now()->addDays(30)->endOfDay())) {
+            if ($record->licence_expiry && $record->licence_expiry->gte(now()->startOfDay()) && $record->licence_expiry->lte(now()->addDays(30)->endOfDay())) {
                 $parts[] = 'Vehicle licence expires on ' . $record->licence_expiry->toDateString();
             }
             $message = implode("\n", $parts);
@@ -43,7 +43,16 @@ class SendFleetMaintenanceReminders extends Command
                     ->where('type', 'fleet_maintenance_reminder')
                     ->where('subject', $subject)
                     ->whereDate('created_at', $today)->exists();
-                if (!$alreadySent && $notifications->sendNotification($recipient, null, 'fleet_maintenance_reminder', $subject, $message)) {
+                if (!$alreadySent) {
+                    Notification::create([
+                        'user_id' => $recipient->id,
+                        'booking_id' => null,
+                        'type' => 'fleet_maintenance_reminder',
+                        'subject' => $subject,
+                        'message' => $message,
+                        'status' => 'pending',
+                        'channel' => 'in_app',
+                    ]);
                     $sent++;
                 }
             }
