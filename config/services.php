@@ -44,6 +44,13 @@ return [
         'enabled' => env('MOBILE_MONEY_ENABLED', false),
     ],
 
+    'intasend' => [
+        'enabled' => env('INTASEND_ENABLED', false),
+        'secret_key' => env('INTASEND_SECRET_KEY'),
+        'webhook_challenge' => env('INTASEND_WEBHOOK_CHALLENGE'),
+        'base_url' => env('INTASEND_BASE_URL', 'https://api.intasend.com'),
+    ],
+
     'twilio' => [
         'sid' => env('TWILIO_ACCOUNT_SID'),
         'token' => env('TWILIO_AUTH_TOKEN'),
