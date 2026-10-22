@@ -231,7 +231,7 @@ class OperationsController extends Controller
                         || (int) $existing->amount_minor !== (int) $data['amount_minor']
                         || strtoupper($existing->currency) !== $currency
                         || $existing->type !== $data['type']) {
-                        throw new \\RuntimeException('Idempotency key was already used for a different transaction.');
+                        throw new \RuntimeException('Idempotency key was already used for a different transaction.');
                     }
                     return $existing;
                 }
@@ -268,6 +268,8 @@ class OperationsController extends Controller
                 return $transaction;
             });
             return response()->json(['data' => $transaction], 201);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => 'Idempotency key was already used for a different transaction.'], 409);
         } catch (\Illuminate\Database\QueryException $e) {
             return response()->json(['message' => 'Transaction could not be recorded. Check the reference and idempotency key.'], 409);
         }
