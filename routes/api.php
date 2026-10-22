@@ -209,6 +209,9 @@ Route::prefix('v2')->middleware('api.version:v2')->group(function () {
     Route::get('/cars/search', [\App\Http\Controllers\Api\V2\CarApiController::class, 'search']);
 });
 
+// Stripe's provider-signed webhook is public but validates Stripe-Signature.
+Route::post('/webhooks/stripe', [\App\Http\Controllers\PaymentController::class, 'stripeWebhook']);
+
 // Webhook Routes
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/webhooks/register', [\App\Http\Controllers\WebhookController::class, 'register']);
