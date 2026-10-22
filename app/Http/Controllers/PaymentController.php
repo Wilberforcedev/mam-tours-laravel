@@ -229,6 +229,62 @@ class PaymentController extends Controller
     }
 
     /**
+     * Confirm Stripe events using the provider signature, not a client-supplied status.
+     */
+    public function stripeWebhook(Request $request)
+    {
+        $secret = config('services.stripe.webhook.secret');
+        if (!$secret) {
+            return response()->json(['error' => 'Stripe webhook is not configured'], 503);
+        }
+
+        try {
+            $event = \Stripe\Webhook::constructEvent(
+                $request->getContent(),
+                $request->header('Stripe-Signature', ''),
+                $secret
+            );
+        } catch (\UnexpectedValueException $e) {
+            return response()->json(['error' => 'Invalid webhook payload'], 400);
+        } catch (\Stripe\Exception\SignatureVerificationException $e) {
+            return response()->json(['error' => 'Invalid webhook signature'], 400);
+        }
+
+        if ($event->type !== 'payment_intent.succeeded') {
+            return response()->json(['received' => true]);
+        }
+
+        $intent = $event->data->object;
+        $bookingId = $intent->metadata->booking_id ?? null;
+        if (!$bookingId) {
+            \Illuminate\Support\Facades\Log::warning('Stripe succeeded event missing booking metadata', ['event_id' => $event->id]);
+            return response()->json(['received' => true]);
+        }
+
+        $booking = Booking::find($bookingId);
+        if (!$booking) {
+            \Illuminate\Support\Facades\Log::warning('Stripe succeeded event references unknown booking', ['event_id' => $event->id]);
+            return response()->json(['received' => true]);
+        }
+        if ($booking->payment_status === 'completed') {
+            return response()->json(['received' => true]);
+        }
+
+        $confirmed = $this->paymentService->confirmStripePayment($intent->id, $booking);
+        if ($confirmed) {
+            $this->notificationService->sendPaymentConfirmation($booking->fresh());
+        } else {
+            \Illuminate\Support\Facades\Log::warning('Stripe event did not match booking quote', [
+                'event_id' => $event->id,
+                'booking_id' => $booking->id,
+            ]);
+        }
+
+        // Return 200 after signature validation to avoid retrying a permanently mismatched event forever.
+        return response()->json(['received' => true]);
+    }
+
+    /**
      * Generate invoice PDF
      */
     public function generateInvoice(Booking $booking)
