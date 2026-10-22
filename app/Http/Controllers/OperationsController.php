@@ -207,7 +207,7 @@ class OperationsController extends Controller
             'booking_id' => 'required|exists:bookings,id',
             'type' => 'required|in:payment,deposit_received,deposit_returned,adjustment',
             'amount_minor' => 'required|integer|min:1',
-            'currency' => 'required|string|size:3',
+            'currency' => 'required|string|in:UGX,USD,ugx,usd',
             'provider' => 'required|in:cash,bank_transfer,manual',
             'provider_reference' => 'nullable|string|max:255',
             'idempotency_key' => 'required|string|max:255',
