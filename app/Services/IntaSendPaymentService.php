@@ -23,7 +23,8 @@ class IntaSendPaymentService
         if (!in_array($booking->payment_method, ['mtn_mobile_money', 'airtel_money', 'mobile_money'], true)) {
             return ['success' => false, 'error' => 'This booking was not created for mobile money payment.'];
         }
-        if (!empty(($booking->payment ?? [])['provider_invoice_id'])) {
+        $existingPayment = $booking->payment ?? [];
+        if (!empty($existingPayment['provider_invoice_id'])) {
             return ['success' => false, 'error' => 'A mobile money request already exists for this booking. Wait for its final status or contact support before retrying.'];
         }
         if (in_array($booking->status, ['canceled', 'cancelled', 'expired', 'completed', 'returned'], true)
