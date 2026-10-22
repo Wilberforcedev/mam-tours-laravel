@@ -75,7 +75,14 @@ class BookingController extends Controller
 
     public function index()
     {
-        return response()->json(Booking::all());
+        $user = auth()->user();
+
+        // Only administrators may list all customer bookings.
+        $bookings = $user && $user->role === 'admin'
+            ? Booking::with('car')->latest()->get()
+            : Booking::where('user_id', $user->id)->with('car')->latest()->get();
+
+        return response()->json($bookings);
     }
 
     public function store(Request $request)
@@ -216,6 +223,12 @@ class BookingController extends Controller
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
+
+        $user = auth()->user();
+        if (!$user || ($user->role !== 'admin' && (int) $booking->user_id !== (int) $user->id)) {
+            return response()->json(['error' => 'Booking not found'], 404);
+        }
+
         return response()->json($booking);
     }
 
@@ -263,6 +276,10 @@ class BookingController extends Controller
         $booking = Booking::find($id);
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
+        }
+        $user = auth()->user();
+        if (!$user || $user->role !== 'admin') {
+            return response()->json(['error' => 'Forbidden'], 403);
         }
         if (!in_array($booking->status, ['pending', 'reserved'])) {
             return response()->json(['error' => 'Booking must be pending or reserved to confirm'], 400);
@@ -313,6 +330,10 @@ class BookingController extends Controller
     {
         $booking = Booking::find($id);
         if (!$booking) {
+            return response()->json(['error' => 'Booking not found'], 404);
+        }
+        $user = auth()->user();
+        if (!$user || ($user->role !== 'admin' && (int) $booking->user_id !== (int) $user->id)) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
         if (in_array($booking->status, ['completed', 'returned', 'canceled', 'expired'])) {
