@@ -186,9 +186,6 @@ class BookingController extends Controller
                 'at' => now(),
             ]);
 
-            // Mark car as unavailable
-            $car->update(['isAvailable' => false]);
-
             // Send admin notification about new booking
             $this->notificationService->sendAdminBookingNotification($booking);
 
@@ -275,9 +272,6 @@ class BookingController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['error' => 'Car unavailable for those dates', 'errors' => $e->errors()], 409);
         }
-
-        $car = $booking->car;
-        $car->update(['isAvailable' => false]);
 
         AuditLog::create([
             'action' => 'booking.reserve',
@@ -374,8 +368,6 @@ class BookingController extends Controller
             'status' => 'canceled',
             'canceledAt' => now(),
         ]);
-
-        $booking->car->update(['isAvailable' => true]);
 
         // Send cancellation notification if user exists
         if ($booking->user_id) {
