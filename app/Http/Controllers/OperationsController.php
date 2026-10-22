@@ -203,14 +203,14 @@ class OperationsController extends Controller
 
     public function refundBooking(Request $request, $id)
     {
-        $booking = \\App\\Models\\Booking::findOrFail($id);
+        $booking = \App\Models\Booking::findOrFail($id);
         if ($booking->status !== 'canceled') {
             return response()->json(['message' => 'Cancel the booking before requesting a refund.'], 422);
         }
         if ($booking->payment_status !== 'completed') {
             return response()->json(['message' => 'Only completed payments can be refunded.'], 422);
         }
-        $result = app(\\App\\Services\\PaymentService::class)->processRefund($booking);
+        $result = app(\App\Services\PaymentService::class)->processRefund($booking);
         if (empty($result['success'])) {
             return response()->json(['message' => $result['error'] ?? 'Refund could not be processed.'], 422);
         }
