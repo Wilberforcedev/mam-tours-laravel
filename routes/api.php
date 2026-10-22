@@ -106,8 +106,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bookings/{id}/confirm', [BookingController::class, 'confirm']);
     Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
     
-    // Admin-only booking operations
-    Route::middleware('admin')->group(function () {
+    // Fleet staff manage physical vehicle handover and return.
+    Route::middleware('role:fleet')->group(function () {
         Route::post('/bookings/{id}/check-out', [BookingController::class, 'checkout']);
         Route::put('/bookings/{id}/return', [BookingController::class, 'returnVehicle']);
     });
