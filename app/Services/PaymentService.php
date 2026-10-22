@@ -187,6 +187,8 @@ class PaymentService
                 $refund = \Stripe\Refund::create([
                     'payment_intent' => $booking->payment['stripe_payment_intent'],
                     'reason' => 'requested_by_customer',
+                ], [
+                    'idempotency_key' => 'mam-booking-' . $booking->id . '-refund-v1',
                 ]);
 
                 DB::transaction(function () use ($booking, $refund) {
@@ -218,7 +220,7 @@ class PaymentService
                     'error' => $e->getMessage(),
                 ]);
                 
-                return ['success' => false, 'error' => $e->getMessage()];
+                return ['success' => false, 'error' => 'Refund provider request failed. Please review the payment dashboard.'];
             }
         }
 
