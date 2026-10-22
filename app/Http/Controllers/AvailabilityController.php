@@ -17,11 +17,16 @@ class AvailabilityController extends Controller
             'car_id' => 'required|integer|exists:cars,id',
             'start_date' => 'required|date_format:Y-m-d',
             'end_date' => 'required|date_format:Y-m-d|after:start_date',
+            'add_ons' => 'nullable|array',
+            'add_ons.driver' => 'nullable|boolean',
+            'add_ons.childSeat' => 'nullable|boolean',
+            'add_ons.delivery' => 'nullable|boolean',
+            'add_ons.discountCode' => 'nullable|string|max:50',
         ]);
         $car = Car::findOrFail($data['car_id']);
         $available = $this->availability->isAvailable($car->id, $data['start_date'], $data['end_date']);
         try {
-            $quote = $available ? $this->pricing->quote($car, $data['start_date'], $data['end_date']) : null;
+            $quote = $available ? $this->pricing->quote($car, $data['start_date'], $data['end_date'], $data['add_ons'] ?? []) : null;
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
