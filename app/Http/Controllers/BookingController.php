@@ -417,8 +417,6 @@ class BookingController extends Controller
             ]),
         ]));
 
-        $booking->car->update(['isAvailable' => true]);
-
         // Send completion notification if user exists
         if ($booking->user_id) {
             $user = $booking->user;
