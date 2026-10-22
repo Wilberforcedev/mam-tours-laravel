@@ -272,7 +272,7 @@ class BookingController extends Controller
             return response()->json(['error' => 'Booking not found'], 404);
         }
         $user = auth()->user();
-        if (!$user || !in_array($user->role, ['admin', 'booking'], true)) {
+        if (!$user || (!in_array($user->role, ['admin', 'booking'], true) && (int) $booking->user_id !== (int) $user->id)) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
         if (!in_array($booking->status, ['pending', 'reserved'])) {
