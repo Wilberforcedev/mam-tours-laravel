@@ -149,6 +149,7 @@ Route::middleware(['auth:sanctum', 'role:finance'])->prefix('operations')->group
     Route::get('/reports/bookings', [\App\Http\Controllers\OperationsController::class, 'bookingsReport']);
     Route::get('/reports/management-summary', [\App\Http\Controllers\OperationsController::class, 'managementSummary']);
     Route::post('/bookings/{id}/refund', [\App\Http\Controllers\OperationsController::class, 'refundBooking']);
+    Route::post('/transactions', [\App\Http\Controllers\OperationsController::class, 'recordFinancialTransaction']);
 });
 
 Route::middleware(['auth:sanctum', 'admin'])->put('/admin/users/{id}/role', [\App\Http\Controllers\OperationsController::class, 'updateStaffRole']);
