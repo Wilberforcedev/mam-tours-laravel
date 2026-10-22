@@ -39,7 +39,18 @@ class PricingService
         $addOnTotal = (!empty($addOns['driver']) ? $driverFee * $days : 0)
             + (!empty($addOns['childSeat']) ? $childSeatFee * $days : 0);
         $deliveryFee = !empty($addOns['delivery']) ? max(0, (int) config('rental.delivery_fee', 0)) : 0;
-        $subtotal = $base + $addOnTotal + $deliveryFee;
+        $grossSubtotal = $base + $addOnTotal + $deliveryFee;
+        $discountCode = strtoupper(trim((string) ($addOns['discountCode'] ?? '')));
+        $discountRate = 0.0;
+        if ($discountCode !== '') {
+            $configuredDiscounts = config('rental.discount_codes', []);
+            $discountRate = (float) ($configuredDiscounts[$discountCode] ?? 0);
+            if ($discountRate <= 0 || $discountRate > 1) {
+                throw new \InvalidArgumentException('The discount code is invalid or inactive.');
+            }
+        }
+        $discountAmount = (int) round($grossSubtotal * $discountRate);
+        $subtotal = max(0, $grossSubtotal - $discountAmount);
         $taxRate = max(0, (float) config('rental.tax_rate', 0.18));
         $taxes = (int) round($subtotal * $taxRate);
         $depositRate = min(1, max(0, (float) config('rental.deposit_rate', 0.20)));
@@ -51,6 +62,8 @@ class PricingService
             'base' => $base,
             'addOnTotal' => $addOnTotal,
             'deliveryFee' => $deliveryFee,
+            'discountCode' => $discountCode ?: null,
+            'discountAmount' => $discountAmount,
             'subtotal' => $subtotal,
             'taxRate' => $taxRate,
             'taxes' => $taxes,
