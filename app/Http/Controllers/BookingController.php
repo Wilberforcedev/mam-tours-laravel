@@ -254,7 +254,8 @@ class BookingController extends Controller
     public function reserve(Request $request)
     {
         $validated = $request->validate([
-            'carId' => 'required|exists:cars,id',
+            'carId' => 'required_without:car_id|exists:cars,id',
+            'car_id' => 'required_without:carId|exists:cars,id',
             'customerName' => 'required|string|max:200',
             'startDate' => 'required|date',
             'endDate' => 'required|date|after:startDate',
