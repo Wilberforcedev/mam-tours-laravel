@@ -293,6 +293,8 @@ class BookingController extends Controller
             });
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json(['error' => 'Car unavailable for those dates', 'errors' => $e->errors()], 409);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
         }
 
         AuditLog::create([
