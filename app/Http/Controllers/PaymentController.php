@@ -281,6 +281,9 @@ class PaymentController extends Controller
 
         $confirmationResult = \Illuminate\Support\Facades\DB::transaction(function () use ($booking, $payload, $invoiceId, $apiReference, $state, $expectedAmount) {
             $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+            if (in_array($locked->payment_status, ['completed', 'refunded'], true)) {
+                return ['booking' => $locked->fresh(), 'newly_completed' => false];
+            }
             $newlyCompleted = false;
             $payment = array_merge($locked->payment ?? [], [
                 'provider' => 'intasend',
