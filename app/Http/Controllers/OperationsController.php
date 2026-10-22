@@ -42,6 +42,11 @@ class OperationsController extends Controller
             }
             return $record;
         });
+        \App\Models\AuditLog::create([
+            'action' => 'fleet.maintenance.created',
+            'details' => ['maintenance_id' => $record->id, 'car_id' => $record->car_id, 'status' => $record->status, 'created_by' => $request->user()->id],
+            'at' => now(),
+        ]);
         return response()->json(['data' => $record->load('car')], 201);
     }
 
@@ -61,6 +66,7 @@ class OperationsController extends Controller
             'licence_expiry' => 'nullable|date',
             'blocks_rental' => 'sometimes|boolean',
         ]);
+        $oldStatus = $record->status;
         $record->update($data);
         $blocked = VehicleMaintenanceRecord::where('car_id', $record->car_id)
             ->where('blocks_rental', true)->whereIn('status', ['scheduled', 'in_progress'])->exists();
@@ -70,6 +76,11 @@ class OperationsController extends Controller
         } else {
             Car::whereKey($record->car_id)->update(['isAvailable' => false]);
         }
+        \App\Models\AuditLog::create([
+            'action' => 'fleet.maintenance.updated',
+            'details' => ['maintenance_id' => $record->id, 'car_id' => $record->car_id, 'old_status' => $oldStatus, 'new_status' => $record->status, 'changed_by' => $request->user()->id],
+            'at' => now(),
+        ]);
         return response()->json(['data' => $record->fresh()->load('car')]);
     }
 
