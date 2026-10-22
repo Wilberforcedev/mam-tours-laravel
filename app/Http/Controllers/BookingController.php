@@ -92,7 +92,11 @@ class BookingController extends Controller
                 ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
                 ->where('startDate', '<', $returnAt)
                 ->where('endDate', '>', $pickupAt)
-                ->exists();
+                ->where(function ($q) {
+                    $q->whereNotIn('status', ['pending', 'reserved'])
+                      ->orWhereNull('expiresAt')
+                      ->orWhere('expiresAt', '>', now());
+                })->exists();
             $maintenanceBlock = \App\Models\VehicleMaintenanceRecord::where('car_id', $car->id)
                 ->where('blocks_rental', true)
                 ->whereIn('status', ['scheduled', 'in_progress'])
@@ -143,6 +147,7 @@ class BookingController extends Controller
                 'return_time' => $returnTime,
                 'addOns' => $validated['addOns'] ?? [],
                 'status' => 'pending',
+                'expiresAt' => now()->addMinutes((int) config('rental.booking_hold_minutes', 30)),
                 'totalPrice' => $pricing['total'],
                 'pricing' => $pricing,
                 'payment_method' => $validated['paymentMethod'],
@@ -264,7 +269,7 @@ class BookingController extends Controller
                     'pricing' => $pricing,
                     'totalPrice' => $pricing['total'],
                     'addOns' => $validated['addOns'] ?? [],
-                    'expiresAt' => now()->addMinutes(30),
+                    'expiresAt' => now()->addMinutes((int) config('rental.booking_hold_minutes', 30)),
                 ]);
             });
         } catch (\Illuminate\Validation\ValidationException $e) {
