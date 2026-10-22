@@ -266,7 +266,7 @@ class OperationsController extends Controller
     {
         $data = $request->validate([
             'booking_id' => 'required|exists:bookings,id',
-            'type' => 'required|in:payment,deposit_received,deposit_returned,adjustment',
+            'type' => 'required|in:payment,refund,deposit_received,deposit_returned,adjustment',
             'direction' => 'required_if:type,adjustment|nullable|in:debit,credit',
             'amount_minor' => 'required|integer|min:1',
             'currency' => 'required|string|in:UGX,USD,ugx,usd',
@@ -312,6 +312,11 @@ class OperationsController extends Controller
                     'metadata' => ['notes' => $data['notes'] ?? null, 'recorded_by' => $request->user()->id],
                     'occurred_at' => now(),
                 ]);
+                if ($data['type'] === 'refund') {
+                    $paidMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')->where('type', 'payment')->sum('amount_minor');
+                    $refundedMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')->where('type', 'refund')->sum('amount_minor');
+                    $booking->update(['payment_status' => $refundedMinor >= $paidMinor ? 'refunded' : 'partially_refunded']);
+                }
                 if ($data['type'] === 'payment' || $data['type'] === 'adjustment') {
                     $quotedMinor = (int) round(((float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0)) * 100);
                     $paidMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
