@@ -137,6 +137,21 @@ Route::post('/payments/refund/{id}', function () {
     ], 501);
 });
 
+// Staff operations: least-privilege access by role.
+Route::middleware(['auth:sanctum', 'role:fleet'])->prefix('operations')->group(function () {
+    Route::get('/maintenance', [\App\Http\Controllers\OperationsController::class, 'maintenanceIndex']);
+    Route::post('/maintenance', [\App\Http\Controllers\OperationsController::class, 'maintenanceStore']);
+    Route::put('/maintenance/{id}', [\App\Http\Controllers\OperationsController::class, 'maintenanceUpdate']);
+});
+
+Route::middleware(['auth:sanctum', 'role:finance'])->prefix('operations')->group(function () {
+    Route::get('/reports/financial-summary', [\App\Http\Controllers\OperationsController::class, 'financialSummary']);
+    Route::get('/reports/bookings', [\App\Http\Controllers\OperationsController::class, 'bookingsReport']);
+    Route::post('/bookings/{id}/refund', [\App\Http\Controllers\OperationsController::class, 'refundBooking']);
+});
+
+Route::middleware(['auth:sanctum', 'admin'])->put('/admin/users/{id}/role', [\App\Http\Controllers\OperationsController::class, 'updateStaffRole']);
+
 // Protected Reports (admin only)
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/reports/bookings.csv', function() {
