@@ -29,48 +29,7 @@ class BookingController extends Controller
 
     private function computePrice($car, $startISO, $endISO, $addOns = [])
     {
-        $days = $this->daysBetween($startISO, $endISO);
-        $base = $car->dailyRate * $days;
-
-        $start = new Carbon($startISO);
-        $end = new Carbon($endISO);
-        $weekendDays = 0;
-
-        for ($i = 0; $i < $days; $i++) {
-            $date = $start->copy()->addDays($i);
-            if ($date->isWeekend()) {
-                $weekendDays++;
-            }
-        }
-
-        $base += round($car->dailyRate * 0.1 * $weekendDays);
-
-        if ($days >= 7) {
-            $base = round($base * 0.9);
-        }
-
-        $addOnTotal = 0;
-        if ($addOns['driver'] ?? false) {
-            $addOnTotal += 50000 * $days;
-        }
-        if ($addOns['childSeat'] ?? false) {
-            $addOnTotal += 10000 * $days;
-        }
-
-        $subtotal = $base + $addOnTotal;
-        $taxes = round($subtotal * 0.18);
-        $deposit = round($subtotal * 0.2);
-        $total = $subtotal + $taxes;
-
-        return [
-            'days' => $days,
-            'base' => $base,
-            'addOnTotal' => $addOnTotal,
-            'subtotal' => $subtotal,
-            'taxes' => $taxes,
-            'deposit' => $deposit,
-            'total' => $total,
-        ];
+        return app(\App\Services\PricingService::class)->quote($car, $startISO, $endISO, $addOns);
     }
 
     public function index()
@@ -113,9 +72,18 @@ class BookingController extends Controller
                 ], 422);
             }
 
-            $car = Car::find($validated['carId']);
-            if (!$car->isAvailable) {
-                return response()->json(['message' => 'Car is not available'], 400);
+            // Hold a row lock on the vehicle until the booking is persisted. Concurrent
+            // requests for this same vehicle serialize before checking date overlap.
+            \Illuminate\Support\Facades\DB::beginTransaction();
+            $car = Car::whereKey($validated['carId'])->lockForUpdate()->firstOrFail();
+            $overlap = Booking::where('car_id', $car->id)
+                ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
+                ->where('startDate', '<', $validated['endDate'])
+                ->where('endDate', '>', $validated['startDate'])
+                ->exists();
+            if ($overlap) {
+                \Illuminate\Support\Facades\DB::rollBack();
+                return response()->json(['message' => 'Vehicle is already booked for the selected dates.'], 409);
             }
 
             $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], []);
@@ -125,28 +93,23 @@ class BookingController extends Controller
             try {
                 if ($request->hasFile('idDocument')) {
                     $file = $request->file('idDocument');
-                    \Log::info('File upload attempt', [
-                        'name' => $file->getClientOriginalName(),
-                        'size' => $file->getSize(),
-                        'mime' => $file->getMimeType(),
-                        'path' => $file->getRealPath()
-                    ]);
+                    // Avoid logging personal file metadata or temporary filesystem paths.
                     
                     // Ensure directory exists
-                    $storagePath = storage_path('app/public/bookings/id-documents');
+                    $storagePath = storage_path('app/private/bookings/id-documents');
                     if (!is_dir($storagePath)) {
                         mkdir($storagePath, 0755, true);
-                        \Log::info('Created storage directory: ' . $storagePath);
+                        // Directory created for private document storage.
                     }
                     
                     // Try to store in public disk
-                    $idDocumentPath = $file->store('bookings/id-documents', 'public');
-                    \Log::info('File uploaded successfully: ' . $idDocumentPath);
+                    $idDocumentPath = $file->store('bookings/id-documents', 'private');
+                    // Never log identity document paths.
                 } else {
-                    \Log::warning('No file in request');
+                    // Identity document upload is optional for this endpoint.
                 }
             } catch (\Exception $fileError) {
-                \Log::error('File upload error: ' . $fileError->getMessage() . ' | ' . $fileError->getFile() . ':' . $fileError->getLine());
+                \Log::error('Identity document upload failed.');
                 // Continue without file if upload fails - don't throw
                 $idDocumentPath = null;
             }
@@ -175,6 +138,7 @@ class BookingController extends Controller
             }
 
             $booking = Booking::create($bookingData);
+            \Illuminate\Support\Facades\DB::commit();
 
             // Track booking creation
             $this->analyticsService->trackBookingCreated($booking->id, [
@@ -217,10 +181,12 @@ class BookingController extends Controller
                 'redirect_url' => route('dashboard')
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::error('Validation error: ' . json_encode($e->errors()));
+            if (\Illuminate\Support\Facades\DB::transactionLevel() > 0) { \Illuminate\Support\Facades\DB::rollBack(); }
+            \Log::warning('Booking validation failed.');
             return response()->json(['message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
-            \Log::error('Booking creation error: ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
+            if (\Illuminate\Support\Facades\DB::transactionLevel() > 0) { \Illuminate\Support\Facades\DB::rollBack(); }
+            \Log::error('Booking creation failed.', ['exception_class' => get_class($e)]);
             return response()->json(['message' => 'Failed to submit booking. Please try again or contact support.'], 500);
         }
     }
@@ -250,24 +216,30 @@ class BookingController extends Controller
             'addOns' => 'nullable|array',
         ]);
 
-        $car = Car::find($validated['carId']);
-        if (!$car->isAvailable) {
-            return response()->json(['error' => 'Car unavailable'], 400);
+        try {
+            $booking = \Illuminate\Support\Facades\DB::transaction(function () use ($validated) {
+                $car = app(\App\Services\BookingAvailabilityService::class)->lockAndAssertAvailable(
+                    (int) $validated['carId'], $validated['startDate'], $validated['endDate']
+                );
+                $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], $validated['addOns'] ?? []);
+
+                return Booking::create([
+                    'car_id' => $validated['carId'],
+                    'customerName' => $validated['customerName'],
+                    'startDate' => $validated['startDate'],
+                    'endDate' => $validated['endDate'],
+                    'status' => 'reserved',
+                    'pricing' => $pricing,
+                    'totalPrice' => $pricing['total'],
+                    'addOns' => $validated['addOns'] ?? [],
+                    'expiresAt' => now()->addMinutes(30),
+                ]);
+            });
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['error' => 'Car unavailable for those dates', 'errors' => $e->errors()], 409);
         }
 
-        $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], $validated['addOns'] ?? []);
-
-        $booking = Booking::create([
-            'car_id' => $validated['carId'],
-            'customerName' => $validated['customerName'],
-            'startDate' => $validated['startDate'],
-            'endDate' => $validated['endDate'],
-            'status' => 'reserved',
-            'pricing' => $pricing,
-            'addOns' => $validated['addOns'] ?? [],
-            'expiresAt' => now()->addMinutes(30),
-        ]);
-
+        $car = $booking->car;
         $car->update(['isAvailable' => false]);
 
         AuditLog::create([
