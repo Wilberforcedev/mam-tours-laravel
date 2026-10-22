@@ -135,6 +135,72 @@ class OperationsController extends Controller
         ]);
     }
 
+    public function managementSummary(Request $request)
+    {
+        $from = $request->input('from', now()->startOfMonth()->toDateString());
+        $to = $request->input('to', now()->toDateString());
+        validator(['from' => $from, 'to' => $to], [
+            'from' => 'required|date_format:Y-m-d',
+            'to' => 'required|date_format:Y-m-d|after_or_equal:from',
+        ])->validate();
+
+        $periodDays = max(1, \Carbon\Carbon::parse($from)->diffInDays(\Carbon\Carbon::parse($to)) + 1);
+        $cars = \App\Models\Car::with(['bookings' => function ($q) use ($from, $to) {
+            $q->whereIn('status', ['confirmed', 'in_use', 'completed', 'returned'])
+              ->where('startDate', '<', \Carbon\Carbon::parse($to)->addDay())
+              ->where('endDate', '>', $from);
+        }])->get();
+
+        $fleet = $cars->map(function ($car) use ($periodDays, $from, $to) {
+            $rentalDays = 0;
+            foreach ($car->bookings as $booking) {
+                $start = max(strtotime($from), strtotime((string) $booking->startDate));
+                $end = min(strtotime(\Carbon\Carbon::parse($to)->addDay()->toDateString()), strtotime((string) $booking->endDate));
+                if ($end > $start) $rentalDays += (int) floor(($end - $start) / 86400);
+            }
+            $paid = $car->bookings->where('payment_status', 'completed')->sum(function ($booking) {
+                return (float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0);
+            });
+            $maintenanceCost = VehicleMaintenanceRecord::where('car_id', $car->id)
+                ->whereBetween(DB::raw('DATE(COALESCE(completed_on, created_at))'), [$from, $to])
+                ->sum('cost_minor');
+            return [
+                'car_id' => $car->id,
+                'vehicle' => trim($car->brand . ' ' . $car->model),
+                'utilization_percent' => round(min(100, ($rentalDays / $periodDays) * 100), 2),
+                'paid_booking_value_by_currency' => $car->bookings->where('payment_status', 'completed')
+                    ->groupBy(fn ($b) => strtoupper((string) ($b->pricing['currency'] ?? config('rental.currency', 'UGX'))))
+                    ->map(fn ($items, $currency) => ['currency' => $currency, 'amount' => $items->sum(fn ($b) => (float) ($b->pricing['total'] ?? $b->totalPrice ?? 0))])->values(),
+                'maintenance_cost_minor_units' => (int) $maintenanceCost,
+            ];
+        });
+
+        $overdue = \App\Models\Booking::with('car')->where('status', 'in_use')->where('endDate', '<', now())->get();
+        $outstanding = \App\Models\Booking::whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])->get()
+            ->map(function ($booking) {
+                $currency = strtoupper((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
+                $quoted = (int) round(((float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0)) * 100);
+                $paid = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
+                    ->whereIn('type', ['payment', 'deposit_received'])->sum('amount_minor');
+                $refunded = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
+                    ->whereIn('type', ['refund', 'deposit_returned'])->sum('amount_minor');
+                return ['booking_id' => $booking->id, 'currency' => $currency, 'outstanding_minor_units' => max(0, $quoted - $paid + $refunded)];
+            })->filter(fn ($item) => $item['outstanding_minor_units'] > 0)->values();
+
+        return response()->json([
+            'period' => ['from' => $from, 'to' => $to],
+            'fleet_utilization_and_profitability' => $fleet,
+            'overdue_rentals' => $overdue,
+            'outstanding_balances' => $outstanding,
+            'maintenance_due_or_expiring' => VehicleMaintenanceRecord::where(function ($q) use ($to) {
+                $q->whereBetween('scheduled_for', [now()->toDateString(), $to])
+                  ->orWhereBetween('insurance_expiry', [now()->toDateString(), $to])
+                  ->orWhereBetween('licence_expiry', [now()->toDateString(), $to]);
+            })->with('car')->get(),
+            'note' => 'Values are grouped by currency where applicable. Outstanding balances and maintenance costs are in minor units.',
+        ]);
+    }
+
     public function refundBooking(Request $request, $id)
     {
         $booking = \\App\\Models\\Booking::findOrFail($id);
