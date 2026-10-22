@@ -172,17 +172,32 @@ class OperationsController extends Controller
             $paid = $car->bookings->where('payment_status', 'completed')->sum(function ($booking) {
                 return (float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0);
             });
-            $maintenanceCost = VehicleMaintenanceRecord::where('car_id', $car->id)
+            $maintenanceCosts = VehicleMaintenanceRecord::where('car_id', $car->id)
                 ->whereBetween(DB::raw('DATE(COALESCE(completed_on, created_at))'), [$from, $to])
-                ->sum('cost_minor');
+                ->select('currency', DB::raw('SUM(cost_minor) as cost_minor'))
+                ->groupBy('currency')->get()->keyBy(function ($item) { return strtoupper($item->currency); });
+            $revenueByCurrency = $car->bookings->where('payment_status', 'completed')
+                ->groupBy(fn ($b) => strtoupper((string) ($b->pricing['currency'] ?? config('rental.currency', 'UGX'))))
+                ->map(fn ($items, $currency) => [
+                    'currency' => $currency,
+                    'amount' => $items->sum(fn ($b) => (float) ($b->pricing['total'] ?? $b->totalPrice ?? 0)),
+                ]);
+            $profitByCurrency = $revenueByCurrency->map(function ($revenue, $currency) use ($maintenanceCosts) {
+                $costMinor = (int) ($maintenanceCosts->get($currency)->cost_minor ?? 0);
+                return [
+                    'currency' => $currency,
+                    'revenue' => $revenue['amount'],
+                    'maintenance_cost_minor_units' => $costMinor,
+                    'gross_profit_after_maintenance_estimate' => round($revenue['amount'] - ($costMinor / 100), 2),
+                ];
+            })->values();
             return [
                 'car_id' => $car->id,
                 'vehicle' => trim($car->brand . ' ' . $car->model),
                 'utilization_percent' => round(min(100, ($rentalDays / $periodDays) * 100), 2),
-                'paid_booking_value_by_currency' => $car->bookings->where('payment_status', 'completed')
-                    ->groupBy(fn ($b) => strtoupper((string) ($b->pricing['currency'] ?? config('rental.currency', 'UGX'))))
-                    ->map(fn ($items, $currency) => ['currency' => $currency, 'amount' => $items->sum(fn ($b) => (float) ($b->pricing['total'] ?? $b->totalPrice ?? 0))])->values(),
-                'maintenance_cost_minor_units' => (int) $maintenanceCost,
+                'paid_booking_value_by_currency' => $revenueByCurrency->values(),
+                'maintenance_costs_by_currency' => $maintenanceCosts->values(),
+                'gross_profit_after_maintenance_estimate_by_currency' => $profitByCurrency,
             ];
         });
 
