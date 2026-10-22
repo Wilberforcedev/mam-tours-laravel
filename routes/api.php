@@ -113,15 +113,25 @@ Route::middleware('auth:sanctum')->group(function () {
 // Public Bookings API (unauthenticated users can submit bookings)
 Route::post('/bookings', [BookingController::class, 'store']);
 
-// Payment stubs (for compatibility)
-Route::post('/payments/intent', function(Request $request) {
-    return response()->json(['message' => 'Payment authorized', 'status' => 'authorized']);
+// Payment endpoints are deliberately unavailable until a real provider workflow
+// verifies amounts, currency, ownership, provider signatures, and final status.
+Route::post('/payments/intent', function () {
+    return response()->json([
+        'message' => 'Payment processing is not configured. No payment was taken.',
+        'status' => 'unavailable',
+    ], 501);
 });
-Route::post('/payments/capture/{id}', function($id) {
-    return response()->json(['message' => 'Payment captured']);
+Route::post('/payments/capture/{id}', function () {
+    return response()->json([
+        'message' => 'Payment capture is not configured. No payment was captured.',
+        'status' => 'unavailable',
+    ], 501);
 });
-Route::post('/payments/refund/{id}', function($id) {
-    return response()->json(['message' => 'Payment refunded']);
+Route::post('/payments/refund/{id}', function () {
+    return response()->json([
+        'message' => 'Refund processing is not configured. No refund was issued.',
+        'status' => 'unavailable',
+    ], 501);
 });
 
 // Protected Reports (admin only)
@@ -189,37 +199,7 @@ Route::post('/webhooks/receive', [\App\Http\Controllers\WebhookController::class
 // API Documentation
 Route::get('/docs/spec', [\App\Http\Controllers\ApiDocController::class, 'spec']);
 
-// Test Upload Endpoint (for debugging)
-Route::post('/test-upload', function (Request $request) {
-    try {
-        $request->validate([
-            'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120'
-        ]);
-        
-        if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $path = $file->store('test-uploads', 'public');
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'File uploaded successfully',
-                'file' => [
-                    'name' => $file->getClientOriginalName(),
-                    'size' => $file->getSize(),
-                    'path' => $path,
-                    'url' => asset('storage/' . $path)
-                ]
-            ]);
-        }
-        
-        return response()->json(['success' => false, 'message' => 'No file provided'], 400);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => $e->getMessage()
-        ], 500);
-    }
-});
+// Public test-upload endpoint removed; uploads must use authenticated workflows.
 
 // KYC API v2 Routes
 Route::prefix('v2')->middleware('api.version:v2')->group(function () {
