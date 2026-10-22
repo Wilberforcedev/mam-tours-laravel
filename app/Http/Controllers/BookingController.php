@@ -217,6 +217,20 @@ class BookingController extends Controller
         }
     }
 
+    public function downloadIdentityDocument($id)
+    {
+        $user = auth()->user();
+        if (!$user || $user->role !== 'admin') {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $booking = Booking::findOrFail($id);
+        $path = $booking->idDocument;
+        if (!$path || !\Illuminate\Support\Facades\Storage::disk('private')->exists($path)) {
+            return response()->json(['message' => 'Identity document not found'], 404);
+        }
+        return \Illuminate\Support\Facades\Storage::disk('private')->download($path);
+    }
+
     public function show($id)
     {
         $booking = Booking::find($id);
