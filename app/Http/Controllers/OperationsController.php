@@ -201,6 +201,70 @@ class OperationsController extends Controller
         ]);
     }
 
+    public function recordFinancialTransaction(Request $request)
+    {
+        $data = $request->validate([
+            'booking_id' => 'required|exists:bookings,id',
+            'type' => 'required|in:payment,deposit_received,deposit_returned,adjustment',
+            'amount_minor' => 'required|integer|min:1',
+            'currency' => 'required|string|size:3',
+            'provider' => 'required|in:cash,bank_transfer,manual',
+            'provider_reference' => 'nullable|string|max:255',
+            'idempotency_key' => 'required|string|max:255',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+        if ($data['provider'] === 'bank_transfer' && empty($data['provider_reference'])) {
+            return response()->json(['message' => 'A bank transfer reference is required.'], 422);
+        }
+        $booking = \App\Models\Booking::findOrFail($data['booking_id']);
+        $currency = strtoupper($data['currency']);
+        $bookingCurrency = strtoupper((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
+        if ($currency !== $bookingCurrency) {
+            return response()->json(['message' => 'Transaction currency must match the booking currency.'], 422);
+        }
+
+        try {
+            $transaction = DB::transaction(function () use ($data, $request, $booking, $currency) {
+                $existing = FinancialTransaction::where('idempotency_key', $data['idempotency_key'])->first();
+                if ($existing) return $existing;
+                $transaction = FinancialTransaction::create([
+                    'booking_id' => $booking->id,
+                    'user_id' => $request->user()->id,
+                    'type' => $data['type'],
+                    'status' => 'completed',
+                    'amount_minor' => $data['amount_minor'],
+                    'currency' => $currency,
+                    'provider' => $data['provider'],
+                    'provider_reference' => $data['provider_reference'] ?? null,
+                    'idempotency_key' => $data['idempotency_key'],
+                    'metadata' => ['notes' => $data['notes'] ?? null, 'recorded_by' => $request->user()->id],
+                    'occurred_at' => now(),
+                ]);
+                if ($data['type'] === 'payment') {
+                    $quotedMinor = (int) round(((float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0)) * 100);
+                    $paidMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
+                        ->whereIn('type', ['payment', 'deposit_received'])->sum('amount_minor');
+                    $refundedMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
+                        ->whereIn('type', ['refund', 'deposit_returned'])->sum('amount_minor');
+                    $status = ($paidMinor - $refundedMinor) >= $quotedMinor ? 'completed' : 'partially_paid';
+                    $booking->update([
+                        'payment_method' => $data['provider'],
+                        'payment_status' => $status,
+                    ]);
+                }
+                \App\Models\AuditLog::create([
+                    'action' => 'finance.transaction.recorded',
+                    'details' => ['transaction_id' => $transaction->id, 'booking_id' => $booking->id, 'type' => $data['type'], 'currency' => $currency, 'amount_minor' => $data['amount_minor'], 'recorded_by' => $request->user()->id],
+                    'at' => now(),
+                ]);
+                return $transaction;
+            });
+            return response()->json(['data' => $transaction], 201);
+        } catch (\Illuminate\Database\QueryException $e) {
+            return response()->json(['message' => 'Transaction could not be recorded. Check the reference and idempotency key.'], 409);
+        }
+    }
+
     public function refundBooking(Request $request, $id)
     {
         $booking = \App\Models\Booking::findOrFail($id);
