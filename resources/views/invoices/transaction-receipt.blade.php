@@ -25,8 +25,8 @@
         <tr><th>Transaction type</th><td>{{ ucwords(str_replace('_', ' ', $transaction->type)) }}</td></tr>
         <tr><th>Payment provider</th><td>{{ strtoupper($transaction->provider ?: 'MANUAL') }}</td></tr>
         <tr><th>Currency</th><td>{{ strtoupper($transaction->currency) }}</td></tr>
-        <tr><th>Amount (provider minor units)</th><td>{{ number_format($transaction->amount_minor) }}</td></tr>
+        <tr><th>Amount</th><td>{{ strtoupper($transaction->currency) === 'UGX' ? number_format($transaction->amount_minor / 100, 0) : number_format($transaction->amount_minor / 100, 2) }} {{ strtoupper($transaction->currency) }}</td></tr>
     </table>
-    <p class="muted">Keep this receipt with your booking records. Amounts are recorded in the transaction's currency and provider minor units.</p>
+    <p class="muted">Keep this receipt with your booking records. The receipt displays the amount in the transaction's currency. The ledger retains provider minor units for reconciliation.</p>
 </body>
 </html>
