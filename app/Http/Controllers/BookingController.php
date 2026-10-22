@@ -37,7 +37,8 @@ class BookingController extends Controller
         $user = auth()->user();
 
         // Only administrators may list all customer bookings.
-        $bookings = $user && $user->role === 'admin'
+        $staffCanViewAll = $user && in_array($user->role, ['admin', 'booking', 'finance'], true);
+        $bookings = $staffCanViewAll
             ? Booking::with('car')->latest()->get()
             : Booking::where('user_id', $user->id)->with('car')->latest()->get();
 
@@ -212,7 +213,7 @@ class BookingController extends Controller
         }
 
         $user = auth()->user();
-        if (!$user || ($user->role !== 'admin' && (int) $booking->user_id !== (int) $user->id)) {
+        if (!$user || (!in_array($user->role, ['admin', 'booking', 'finance'], true) && (int) $booking->user_id !== (int) $user->id)) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
 
@@ -271,7 +272,7 @@ class BookingController extends Controller
             return response()->json(['error' => 'Booking not found'], 404);
         }
         $user = auth()->user();
-        if (!$user || $user->role !== 'admin') {
+        if (!$user || !in_array($user->role, ['admin', 'booking'], true)) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
         if (!in_array($booking->status, ['pending', 'reserved'])) {
@@ -326,7 +327,7 @@ class BookingController extends Controller
             return response()->json(['error' => 'Booking not found'], 404);
         }
         $user = auth()->user();
-        if (!$user || ($user->role !== 'admin' && (int) $booking->user_id !== (int) $user->id)) {
+        if (!$user || (!in_array($user->role, ['admin', 'booking'], true) && (int) $booking->user_id !== (int) $user->id)) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
         if (in_array($booking->status, ['completed', 'returned', 'canceled', 'expired'])) {
