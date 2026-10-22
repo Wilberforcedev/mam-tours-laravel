@@ -44,6 +44,8 @@ class Booking extends Model
         'return_fuel_percent',
         'pickup_condition_notes',
         'return_condition_notes',
+        'pickup_time',
+        'return_time',
     ];
 
     protected $casts = [
