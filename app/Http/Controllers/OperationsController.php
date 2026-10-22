@@ -37,7 +37,8 @@ class OperationsController extends Controller
         $data['created_by'] = $request->user()->id;
         $record = DB::transaction(function () use ($data) {
             $record = VehicleMaintenanceRecord::create($data);
-            if ($record->blocks_rental && in_array($record->status, ['scheduled', 'in_progress'], true)) {
+            if ($record->blocks_rental && ($record->status === 'in_progress'
+                || ($record->status === 'scheduled' && $record->scheduled_for && $record->scheduled_for->lte(now()->toDateString())))) {
                 Car::whereKey($record->car_id)->update(['isAvailable' => false]);
             }
             return $record;
@@ -69,7 +70,16 @@ class OperationsController extends Controller
         $oldStatus = $record->status;
         $record->update($data);
         $blocked = VehicleMaintenanceRecord::where('car_id', $record->car_id)
-            ->where('blocks_rental', true)->whereIn('status', ['scheduled', 'in_progress'])->exists();
+            ->where('blocks_rental', true)
+            ->where(function ($q) {
+                $q->where('status', 'in_progress')
+                  ->orWhere(function ($scheduled) {
+                      $scheduled->where('status', 'scheduled')
+                          ->where(function ($dates) {
+                              $dates->whereNull('scheduled_for')->orWhere('scheduled_for', '<=', now()->toDateString());
+                          });
+                  });
+            })->exists();
         if (!$blocked) {
             // A vehicle is available only if no active booking overlaps now and no maintenance blocks it.
             Car::whereKey($record->car_id)->update(['isAvailable' => true]);
