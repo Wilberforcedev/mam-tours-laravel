@@ -86,7 +86,7 @@ class BookingController extends Controller
                 ->where('startDate', '<', $validated['endDate'])
                 ->where('endDate', '>', $validated['startDate'])
                 ->exists();
-            $maintenanceBlock = \\App\\Models\\VehicleMaintenanceRecord::where('car_id', $car->id)
+            $maintenanceBlock = \App\Models\VehicleMaintenanceRecord::where('car_id', $car->id)
                 ->where('blocks_rental', true)
                 ->whereIn('status', ['scheduled', 'in_progress'])
                 ->where(function ($q) use ($validated) {
