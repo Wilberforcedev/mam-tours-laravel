@@ -20,7 +20,11 @@ class AvailabilityController extends Controller
         ]);
         $car = Car::findOrFail($data['car_id']);
         $available = $this->availability->isAvailable($car->id, $data['start_date'], $data['end_date']);
-        $quote = $available ? $this->pricing->quote($car, $data['start_date'], $data['end_date']) : null;
+        try {
+            $quote = $available ? $this->pricing->quote($car, $data['start_date'], $data['end_date']) : null;
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
         return response()->json(['available' => $available, 'quote' => $quote]);
     }
 }
