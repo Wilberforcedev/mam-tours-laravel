@@ -55,6 +55,8 @@ class BookingController extends Controller
                 'customerPhone' => 'required|string|max:20',
                 'startDate' => 'required|date_format:Y-m-d',
                 'endDate' => 'required|date_format:Y-m-d|after:startDate',
+                'pickupTime' => 'nullable|date_format:H:i',
+                'returnTime' => 'nullable|date_format:H:i',
                 'paymentMethod' => 'required|in:stripe,mtn_mobile_money,airtel_money,bank_transfer,cash',
                 'mobileMoneyNumber' => 'nullable|string|max:20',
                 'idType' => 'nullable|in:nin,passport',
@@ -77,20 +79,25 @@ class BookingController extends Controller
                 ], 422);
             }
 
+            $pickupTime = $validated['pickupTime'] ?? config('rental.default_pickup_time', '09:00');
+            $returnTime = $validated['returnTime'] ?? config('rental.default_return_time', '09:00');
+            $pickupAt = Carbon::parse($validated['startDate'] . ' ' . $pickupTime);
+            $returnAt = Carbon::parse($validated['endDate'] . ' ' . $returnTime);
+
             // Hold a row lock on the vehicle until the booking is persisted. Concurrent
             // requests for this same vehicle serialize before checking date overlap.
             \Illuminate\Support\Facades\DB::beginTransaction();
             $car = Car::whereKey($validated['carId'])->lockForUpdate()->firstOrFail();
             $overlap = Booking::where('car_id', $car->id)
                 ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
-                ->where('startDate', '<', $validated['endDate'])
-                ->where('endDate', '>', $validated['startDate'])
+                ->where('startDate', '<', $returnAt)
+                ->where('endDate', '>', $pickupAt)
                 ->exists();
             $maintenanceBlock = \App\Models\VehicleMaintenanceRecord::where('car_id', $car->id)
                 ->where('blocks_rental', true)
                 ->whereIn('status', ['scheduled', 'in_progress'])
                 ->where(function ($q) use ($validated) {
-                    $q->whereNull('scheduled_for')->orWhere('scheduled_for', '<', $validated['endDate']);
+                    $q->whereNull('scheduled_for')->orWhere('scheduled_for', '<', $returnAt->toDateString());
                 })->exists();
             if ($overlap || $maintenanceBlock) {
                 \Illuminate\Support\Facades\DB::rollBack();
@@ -130,11 +137,14 @@ class BookingController extends Controller
                 'customerName' => $validated['customerName'],
                 'customerEmail' => $validated['customerEmail'],
                 'customerPhone' => $validated['customerPhone'],
-                'startDate' => $validated['startDate'],
-                'endDate' => $validated['endDate'],
+                'startDate' => $pickupAt,
+                'endDate' => $returnAt,
+                'pickup_time' => $pickupTime,
+                'return_time' => $returnTime,
+                'addOns' => $validated['addOns'] ?? [],
                 'status' => 'pending',
                 'totalPrice' => $pricing['total'],
-                'pricing' => json_encode($pricing),
+                'pricing' => $pricing,
                 'payment_method' => $validated['paymentMethod'],
                 'payment_status' => 'pending',
                 'mobile_money_number' => $validated['mobileMoneyNumber'] ?? null,
@@ -227,21 +237,29 @@ class BookingController extends Controller
             'customerName' => 'required|string|max:200',
             'startDate' => 'required|date',
             'endDate' => 'required|date|after:startDate',
+            'pickupTime' => 'nullable|date_format:H:i',
+            'returnTime' => 'nullable|date_format:H:i',
             'addOns' => 'nullable|array',
         ]);
 
         try {
             $booking = \Illuminate\Support\Facades\DB::transaction(function () use ($validated) {
+                $pickupTime = $validated['pickupTime'] ?? config('rental.default_pickup_time', '09:00');
+                $returnTime = $validated['returnTime'] ?? config('rental.default_return_time', '09:00');
+                $pickupAt = Carbon::parse($validated['startDate'] . ' ' . $pickupTime);
+                $returnAt = Carbon::parse($validated['endDate'] . ' ' . $returnTime);
                 $car = app(\App\Services\BookingAvailabilityService::class)->lockAndAssertAvailable(
-                    (int) $validated['carId'], $validated['startDate'], $validated['endDate']
+                    (int) $validated['carId'], (string) $pickupAt, (string) $returnAt
                 );
                 $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], $validated['addOns'] ?? []);
 
                 return Booking::create([
                     'car_id' => $validated['carId'],
                     'customerName' => $validated['customerName'],
-                    'startDate' => $validated['startDate'],
-                    'endDate' => $validated['endDate'],
+                    'startDate' => $pickupAt,
+                    'endDate' => $returnAt,
+                    'pickup_time' => $pickupTime,
+                    'return_time' => $returnTime,
                     'status' => 'reserved',
                     'pricing' => $pricing,
                     'totalPrice' => $pricing['total'],
