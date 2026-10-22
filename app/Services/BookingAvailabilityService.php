@@ -16,6 +16,11 @@ class BookingAvailabilityService
     public function lockAndAssertAvailable(int $carId, string $startDate, string $endDate, ?int $ignoreBookingId = null): Car
     {
         $car = Car::whereKey($carId)->lockForUpdate()->firstOrFail();
+        if (!$car->isAvailable) {
+            throw ValidationException::withMessages([
+                'carId' => ['This vehicle is currently out of service. Please choose another vehicle.'],
+            ]);
+        }
 
         $query = Booking::where('car_id', $carId)
             ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
@@ -48,6 +53,8 @@ class BookingAvailabilityService
 
     public function isAvailable(int $carId, string $startDate, string $endDate): bool
     {
+        $carOperational = Car::whereKey($carId)->value('isAvailable');
+        if (!$carOperational) return false;
         $bookingOverlap = Booking::where('car_id', $carId)
             ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
             ->where('startDate', '<', $endDate)
