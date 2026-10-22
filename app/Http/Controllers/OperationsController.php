@@ -293,14 +293,16 @@ class OperationsController extends Controller
                         || (int) $existing->amount_minor !== (int) $data['amount_minor']
                         || strtoupper($existing->currency) !== $currency
                         || $existing->type !== $data['type']
-                        || ($existing->direction ?? null) !== ($data['direction'] ?? null)) {
+                        || $existing->provider !== $data['provider']
+                        || ($existing->direction ?? null) !== ($data['direction'] ?? null)
+                        || (($data['provider_reference'] ?? null) !== null && $existing->provider_reference !== $data['provider_reference'])) {
                         throw new \RuntimeException('Idempotency key was already used for a different transaction.');
                     }
                     return $existing;
                 }
                 $lockedBooking = \App\Models\Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
                 if ($data['type'] === 'refund') {
-                    if ($lockedBooking->status !== 'canceled') {
+                    if (!in_array($lockedBooking->status, ['canceled', 'cancelled'], true)) {
                         throw \Illuminate\Validation\ValidationException::withMessages(['type' => ['Cancel the booking before recording a refund.']]);
                     }
                     $paidForRefund = (int) FinancialTransaction::where('booking_id', $lockedBooking->id)->where('status', 'completed')->where('type', 'payment')->sum('amount_minor');
