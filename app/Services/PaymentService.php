@@ -28,6 +28,9 @@ class PaymentService
             if (!config('services.stripe.secret') || !config('services.stripe.enabled', false)) {
                 return ['success' => false, 'error' => 'Card payments are not enabled. Please contact MAM Tours.'];
             }
+            if (($booking->payment_method ?? $booking->paymentMethod) !== 'stripe') {
+                return ['success' => false, 'error' => 'This booking was not created for card payment.'];
+            }
             if (in_array($booking->status, ['canceled', 'cancelled', 'expired', 'completed', 'returned'], true)
                 || in_array($booking->payment_status, ['completed', 'refunded'], true)) {
                 return ['success' => false, 'error' => 'This booking is not eligible for a new payment.'];
