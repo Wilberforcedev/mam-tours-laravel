@@ -22,7 +22,7 @@
         <tr><th>Customer</th><td>{{ optional(optional($transaction->booking)->user)->name ?: optional($transaction->user)->name ?: optional($transaction->booking)->customerName ?: 'Customer' }}</td></tr>
         <tr><th>Booking</th><td>{{ $transaction->booking_id ?: '—' }}</td></tr>
         <tr><th>Vehicle</th><td>{{ optional(optional($transaction->booking)->car)->brand }} {{ optional(optional($transaction->booking)->car)->model }}</td></tr>
-        <tr><th>Transaction type</th><td>{{ ucwords(str_replace('_', ' ', $transaction->type)) }}</td></tr>
+        <tr><th>Transaction type</th><td>{{ ucwords(str_replace('_', ' ', $transaction->type)) }}{{ $transaction->direction ? ' (' . strtoupper($transaction->direction) . ')' : '' }}</td></tr>
         <tr><th>Payment provider</th><td>{{ strtoupper($transaction->provider ?: 'MANUAL') }}</td></tr>
         <tr><th>Currency</th><td>{{ strtoupper($transaction->currency) }}</td></tr>
         <tr><th>Amount</th><td>{{ strtoupper($transaction->currency) === 'UGX' ? number_format($transaction->amount_minor / 100, 0) : number_format($transaction->amount_minor / 100, 2) }} {{ strtoupper($transaction->currency) }}</td></tr>
