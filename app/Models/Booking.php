@@ -9,6 +9,8 @@ class Booking extends Model
 {
     use HasFactory;
 
+    protected $hidden = ['idNumber', 'idDocument', 'payment'];
+
     protected $fillable = [
         'car_id',
         'user_id',
