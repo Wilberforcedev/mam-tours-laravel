@@ -50,7 +50,9 @@ This branch implements an initial production-hardening and operations foundation
 - `GET /api/operations/reports/financial-summary` — ledger totals grouped by currency/type/status (finance/admin).
 - `GET /api/operations/reports/bookings` — booking report (finance/admin).
 - `GET /api/operations/reports/management-summary` — utilization, overdue rentals, outstanding balances and expiry/service reminders (finance/admin).
+- `GET /api/operations/transactions` — search the ledger (finance/admin).
 - `POST /api/operations/transactions` — append a cash/bank/manual ledger transaction (finance/admin).
+- `GET /api/operations/transactions/{id}/receipt` — download a receipt for a completed transaction (finance/admin).
 - `POST /api/operations/bookings/{id}/refund` — Stripe refund request for a canceled paid booking (finance/admin).
 - `PUT /api/admin/users/{id}/role` — assign an approved staff/customer role (admin).
 
