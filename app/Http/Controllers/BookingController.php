@@ -63,10 +63,6 @@ class BookingController extends Controller
                 'idNumber' => 'nullable|string|max:50',
                 'idDocument' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
                 'addOns' => 'nullable|array',
-            'addOns.driver' => 'nullable|boolean',
-            'addOns.childSeat' => 'nullable|boolean',
-            'addOns.delivery' => 'nullable|boolean',
-            'addOns.discountCode' => 'nullable|string|max:50',
                 'addOns.driver' => 'nullable|boolean',
                 'addOns.childSeat' => 'nullable|boolean',
                 'addOns.delivery' => 'nullable|boolean',
@@ -105,7 +101,7 @@ class BookingController extends Controller
             $maintenanceBlock = \App\Models\VehicleMaintenanceRecord::where('car_id', $car->id)
                 ->where('blocks_rental', true)
                 ->whereIn('status', ['scheduled', 'in_progress'])
-                ->where(function ($q) use ($validated) {
+                ->where(function ($q) use ($returnAt) {
                     $q->whereNull('scheduled_for')->orWhere('scheduled_for', '<', $returnAt->toDateString());
                 })->exists();
             if ($overlap || $maintenanceBlock) {
@@ -267,12 +263,14 @@ class BookingController extends Controller
             $booking = \Illuminate\Support\Facades\DB::transaction(function () use ($validated) {
                 $pickupTime = $validated['pickupTime'] ?? config('rental.default_pickup_time', '09:00');
                 $returnTime = $validated['returnTime'] ?? config('rental.default_return_time', '09:00');
-                $pickupAt = Carbon::parse($validated['startDate'] . ' ' . $pickupTime);
-                $returnAt = Carbon::parse($validated['endDate'] . ' ' . $returnTime);
+                $pickupDate = Carbon::parse($validated['startDate'])->toDateString();
+                $returnDate = Carbon::parse($validated['endDate'])->toDateString();
+                $pickupAt = Carbon::parse($pickupDate . ' ' . $pickupTime);
+                $returnAt = Carbon::parse($returnDate . ' ' . $returnTime);
                 $car = app(\App\Services\BookingAvailabilityService::class)->lockAndAssertAvailable(
                     (int) $validated['carId'], (string) $pickupAt, (string) $returnAt
                 );
-                $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], $validated['addOns'] ?? []);
+                $pricing = $this->computePrice($car, $pickupDate, $returnDate, $validated['addOns'] ?? []);
 
                 return Booking::create([
                     'car_id' => $validated['carId'],
