@@ -16,4 +16,5 @@ return [
     'child_seat_daily_fee' => (int) env('RENTAL_CHILD_SEAT_DAILY_FEE', 10000),
     'tax_rate' => (float) env('RENTAL_TAX_RATE', 0.18),
     'deposit_rate' => (float) env('RENTAL_DEPOSIT_RATE', 0.20),
+    'discount_codes' => json_decode(env('RENTAL_DISCOUNT_CODES_JSON', '{}'), true) ?: [],
 ];
