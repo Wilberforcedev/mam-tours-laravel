@@ -20,7 +20,12 @@ class BookingAvailabilityService
         $query = Booking::where('car_id', $carId)
             ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
             ->where('startDate', '<', $endDate)
-            ->where('endDate', '>', $startDate);
+            ->where('endDate', '>', $startDate)
+            ->where(function ($q) {
+                $q->whereNotIn('status', ['pending', 'reserved'])
+                  ->orWhereNull('expiresAt')
+                  ->orWhere('expiresAt', '>', now());
+            });
 
         if ($ignoreBookingId) {
             $query->where('id', '<>', $ignoreBookingId);
@@ -46,7 +51,12 @@ class BookingAvailabilityService
         $bookingOverlap = Booking::where('car_id', $carId)
             ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
             ->where('startDate', '<', $endDate)
-            ->where('endDate', '>', $startDate)->exists();
+            ->where('endDate', '>', $startDate)
+            ->where(function ($q) {
+                $q->whereNotIn('status', ['pending', 'reserved'])
+                  ->orWhereNull('expiresAt')
+                  ->orWhere('expiresAt', '>', now());
+            })->exists();
         $maintenanceBlock = \App\Models\VehicleMaintenanceRecord::where('car_id', $carId)
             ->where('blocks_rental', true)
             ->whereIn('status', ['scheduled', 'in_progress'])
