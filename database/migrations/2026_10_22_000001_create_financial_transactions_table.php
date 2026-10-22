@@ -13,6 +13,7 @@ class CreateFinancialTransactionsTable extends Migration
             $table->foreignId('booking_id')->nullable()->constrained('bookings')->nullOnDelete();
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('type', 32); // payment, refund, deposit_received, deposit_returned, adjustment
+            $table->string('direction', 8)->nullable(); // adjustment: debit increases receivable, credit reduces it
             $table->string('status', 24)->default('pending');
             $table->unsignedBigInteger('amount_minor');
             $table->char('currency', 3)->default('UGX');
