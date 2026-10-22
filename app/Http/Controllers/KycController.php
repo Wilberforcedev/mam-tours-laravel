@@ -33,33 +33,33 @@ class KycController extends Controller
         // Delete old documents if they exist
         $kyc = $user->kyc;
         if ($kyc) {
-            if ($kyc->id_document_path && Storage::disk('public')->exists($kyc->id_document_path)) {
-                Storage::disk('public')->delete($kyc->id_document_path);
+            if ($kyc->id_document_path && Storage::disk('private')->exists($kyc->id_document_path)) {
+                Storage::disk('private')->delete($kyc->id_document_path);
             }
-            if ($kyc->permit_document_path && Storage::disk('public')->exists($kyc->permit_document_path)) {
-                Storage::disk('public')->delete($kyc->permit_document_path);
+            if ($kyc->permit_document_path && Storage::disk('private')->exists($kyc->permit_document_path)) {
+                Storage::disk('private')->delete($kyc->permit_document_path);
             }
-            if ($kyc->id_original_document_path && Storage::disk('public')->exists($kyc->id_original_document_path)) {
-                Storage::disk('public')->delete($kyc->id_original_document_path);
+            if ($kyc->id_original_document_path && Storage::disk('private')->exists($kyc->id_original_document_path)) {
+                Storage::disk('private')->delete($kyc->id_original_document_path);
             }
-            if ($kyc->permit_original_document_path && Storage::disk('public')->exists($kyc->permit_original_document_path)) {
-                Storage::disk('public')->delete($kyc->permit_original_document_path);
+            if ($kyc->permit_original_document_path && Storage::disk('private')->exists($kyc->permit_original_document_path)) {
+                Storage::disk('private')->delete($kyc->permit_original_document_path);
             }
         }
 
         // Store new documents
-        $idDocPath = $request->file('id_document')->store('kyc/id_documents', 'public');
-        $permitDocPath = $request->file('permit_document')->store('kyc/permit_documents', 'public');
+        $idDocPath = $request->file('id_document')->store('kyc/id_documents', 'private');
+        $permitDocPath = $request->file('permit_document')->store('kyc/permit_documents', 'private');
         
         $idOriginalDocPath = null;
         $permitOriginalDocPath = null;
         
         if ($request->hasFile('id_original_document')) {
-            $idOriginalDocPath = $request->file('id_original_document')->store('kyc/id_original_documents', 'public');
+            $idOriginalDocPath = $request->file('id_original_document')->store('kyc/id_original_documents', 'private');
         }
         
         if ($request->hasFile('permit_original_document')) {
-            $permitOriginalDocPath = $request->file('permit_original_document')->store('kyc/permit_original_documents', 'public');
+            $permitOriginalDocPath = $request->file('permit_original_document')->store('kyc/permit_original_documents', 'private');
         }
 
         // Create or update KYC
@@ -139,10 +139,10 @@ class KycController extends Controller
             return response()->json(['error' => 'Invalid document type'], 400);
         }
 
-        if (!$path || !Storage::disk('public')->exists($path)) {
+        if (!$path || !Storage::disk('private')->exists($path)) {
             return response()->json(['error' => 'Document not found'], 404);
         }
 
-        return Storage::disk('public')->download($path);
+        return Storage::disk('private')->download($path);
     }
 }
