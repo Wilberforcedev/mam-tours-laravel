@@ -28,6 +28,10 @@ class PaymentService
             if (!config('services.stripe.secret') || !config('services.stripe.enabled', false)) {
                 return ['success' => false, 'error' => 'Card payments are not enabled. Please contact MAM Tours.'];
             }
+            if (in_array($booking->status, ['canceled', 'cancelled', 'expired', 'completed', 'returned'], true)
+                || in_array($booking->payment_status, ['completed', 'refunded'], true)) {
+                return ['success' => false, 'error' => 'This booking is not eligible for a new payment.'];
+            }
             $amount = $this->calculateTotalAmount($booking);
             $currency = strtolower((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
             $providerCurrency = strtolower((string) config('services.stripe.currency', ''));
@@ -149,8 +153,6 @@ class PaymentService
                 );
             });
             return true;
-            
-            return false;
         } catch (ApiErrorException $e) {
             Log::error('Stripe payment confirmation failed', [
                 'payment_intent_id' => $paymentIntentId,
