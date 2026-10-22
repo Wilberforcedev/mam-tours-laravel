@@ -190,9 +190,8 @@ class BookingController extends Controller
                 'details' => [
                     'bookingId' => $booking->id,
                     'carId' => $booking->car_id,
-                    'idType' => $validated['idType'] ?? null,
-                    'idNumber' => $validated['idNumber'] ?? null,
-                    'idDocument' => $idDocumentPath,
+                    // Do not copy identity numbers or document paths into audit logs.
+                    'identityDocumentProvided' => !empty($idDocumentPath),
                 ],
                 'at' => now(),
             ]);
@@ -205,7 +204,16 @@ class BookingController extends Controller
 
             return response()->json([
                 'message' => 'Booking submitted successfully! Admin will confirm shortly.',
-                'booking' => $booking,
+                'booking' => [
+                    'id' => $booking->id,
+                    'car_id' => $booking->car_id,
+                    'customerName' => $booking->customerName,
+                    'startDate' => $booking->startDate,
+                    'endDate' => $booking->endDate,
+                    'status' => $booking->status,
+                    'pricing' => $pricing,
+                    'payment_status' => $booking->payment_status,
+                ],
                 'redirect_url' => route('dashboard')
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -213,7 +221,7 @@ class BookingController extends Controller
             return response()->json(['message' => 'Validation failed', 'errors' => $e->errors()], 422);
         } catch (\Exception $e) {
             \Log::error('Booking creation error: ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
-            return response()->json(['message' => 'Failed to submit booking', 'error' => $e->getMessage()], 500);
+            return response()->json(['message' => 'Failed to submit booking. Please try again or contact support.'], 500);
         }
     }
 
