@@ -38,7 +38,7 @@ class PricingService
         $childSeatFee = (int) config('rental.child_seat_daily_fee', 10000);
         $addOnTotal = (!empty($addOns['driver']) ? $driverFee * $days : 0)
             + (!empty($addOns['childSeat']) ? $childSeatFee * $days : 0);
-        $deliveryFee = max(0, (int) ($addOns['deliveryFee'] ?? 0));
+        $deliveryFee = !empty($addOns['delivery']) ? max(0, (int) config('rental.delivery_fee', 0)) : 0;
         $subtotal = $base + $addOnTotal + $deliveryFee;
         $taxRate = max(0, (float) config('rental.tax_rate', 0.18));
         $taxes = (int) round($subtotal * $taxRate);
