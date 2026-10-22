@@ -63,9 +63,14 @@ class BookingController extends Controller
                 'idNumber' => 'nullable|string|max:50',
                 'idDocument' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
                 'addOns' => 'nullable|array',
+            'addOns.driver' => 'nullable|boolean',
+            'addOns.childSeat' => 'nullable|boolean',
+            'addOns.delivery' => 'nullable|boolean',
+            'addOns.discountCode' => 'nullable|string|max:50',
                 'addOns.driver' => 'nullable|boolean',
                 'addOns.childSeat' => 'nullable|boolean',
                 'addOns.delivery' => 'nullable|boolean',
+                'addOns.discountCode' => 'nullable|string|max:50',
             ]);
 
             // Check if user is trying to use cashless payment without ID verification
