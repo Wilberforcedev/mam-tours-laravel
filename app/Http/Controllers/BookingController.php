@@ -296,8 +296,13 @@ class BookingController extends Controller
         return response()->json(['message' => 'Booking confirmed', 'booking' => $booking]);
     }
 
-    public function checkout($id)
+    public function checkout(Request $request, $id)
     {
+        $validated = $request->validate([
+            'pickup_odometer_km' => 'nullable|integer|min:0',
+            'pickup_fuel_percent' => 'nullable|integer|min:0|max:100',
+            'pickup_condition_notes' => 'nullable|string|max:5000',
+        ]);
         $booking = Booking::find($id);
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
@@ -306,10 +311,18 @@ class BookingController extends Controller
             return response()->json(['error' => 'Booking must be confirmed'], 400);
         }
 
-        $booking->update([
+        $booking->update(array_merge($validated, [
             'status' => 'in_use',
             'checkedOutAt' => now(),
-        ]);
+            'conditionReports' => array_merge($booking->conditionReports ?? [], [
+                'pickup' => [
+                    'odometer_km' => $validated['pickup_odometer_km'] ?? null,
+                    'fuel_percent' => $validated['pickup_fuel_percent'] ?? null,
+                    'notes' => $validated['pickup_condition_notes'] ?? null,
+                    'recorded_at' => now()->toIso8601String(),
+                ],
+            ]),
+        ]));
 
         AuditLog::create([
             'action' => 'booking.checkout',
@@ -356,8 +369,13 @@ class BookingController extends Controller
         return response()->json(['message' => 'Booking canceled', 'booking' => $booking]);
     }
 
-    public function returnVehicle($id)
+    public function returnVehicle(Request $request, $id)
     {
+        $validated = $request->validate([
+            'return_odometer_km' => 'nullable|integer|min:0',
+            'return_fuel_percent' => 'nullable|integer|min:0|max:100',
+            'return_condition_notes' => 'nullable|string|max:5000',
+        ]);
         $booking = Booking::find($id);
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
@@ -366,10 +384,23 @@ class BookingController extends Controller
             return response()->json(['error' => 'Booking not in use'], 400);
         }
 
-        $booking->update([
+        if (isset($validated['return_odometer_km'], $booking->pickup_odometer_km)
+            && $validated['return_odometer_km'] < $booking->pickup_odometer_km) {
+            return response()->json(['error' => 'Return odometer cannot be lower than pickup odometer.'], 422);
+        }
+
+        $booking->update(array_merge($validated, [
             'status' => 'completed',
             'returnedAt' => now(),
-        ]);
+            'conditionReports' => array_merge($booking->conditionReports ?? [], [
+                'return' => [
+                    'odometer_km' => $validated['return_odometer_km'] ?? null,
+                    'fuel_percent' => $validated['return_fuel_percent'] ?? null,
+                    'notes' => $validated['return_condition_notes'] ?? null,
+                    'recorded_at' => now()->toIso8601String(),
+                ],
+            ]),
+        ]));
 
         $booking->car->update(['isAvailable' => true]);
 
