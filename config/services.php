@@ -33,9 +33,15 @@ return [
     'stripe' => [
         'key' => env('STRIPE_KEY'),
         'secret' => env('STRIPE_SECRET'),
+        'enabled' => env('STRIPE_ENABLED', false),
+        'currency' => env('STRIPE_CURRENCY', ''),
         'webhook' => [
             'secret' => env('STRIPE_WEBHOOK_SECRET'),
         ],
+    ],
+
+    'mobile_money' => [
+        'enabled' => env('MOBILE_MONEY_ENABLED', false),
     ],
 
     'twilio' => [
