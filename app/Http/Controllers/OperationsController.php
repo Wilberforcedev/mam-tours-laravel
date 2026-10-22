@@ -292,7 +292,8 @@ class OperationsController extends Controller
                     if ((int) $existing->booking_id !== (int) $booking->id
                         || (int) $existing->amount_minor !== (int) $data['amount_minor']
                         || strtoupper($existing->currency) !== $currency
-                        || $existing->type !== $data['type']) {
+                        || $existing->type !== $data['type']
+                        || ($existing->direction ?? null) !== ($data['direction'] ?? null)) {
                         throw new \RuntimeException('Idempotency key was already used for a different transaction.');
                     }
                     return $existing;
