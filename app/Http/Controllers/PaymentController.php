@@ -266,7 +266,7 @@ class PaymentController extends Controller
             \Illuminate\Support\Facades\Log::warning('Stripe succeeded event references unknown booking', ['event_id' => $event->id]);
             return response()->json(['received' => true]);
         }
-        if ($booking->payment_status === 'completed') {
+        if (in_array($booking->payment_status, ['completed', 'refunded'], true)) {
             return response()->json(['received' => true]);
         }
 
