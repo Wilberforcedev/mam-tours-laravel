@@ -6,6 +6,8 @@ return [
     'currency' => env('RENTAL_CURRENCY', 'UGX'),
     'minimum_days' => (int) env('RENTAL_MINIMUM_DAYS', 1),
     'maximum_days' => (int) env('RENTAL_MAXIMUM_DAYS', 30),
+    'default_pickup_time' => env('RENTAL_DEFAULT_PICKUP_TIME', '09:00'),
+    'default_return_time' => env('RENTAL_DEFAULT_RETURN_TIME', '09:00'),
     'weekend_surcharge_rate' => (float) env('RENTAL_WEEKEND_SURCHARGE_RATE', 0.10),
     'weekly_discount_rate' => (float) env('RENTAL_WEEKLY_DISCOUNT_RATE', 0.10),
     'additional_driver_daily_fee' => (int) env('RENTAL_ADDITIONAL_DRIVER_DAILY_FEE', 50000),
