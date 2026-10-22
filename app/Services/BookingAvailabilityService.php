@@ -26,7 +26,13 @@ class BookingAvailabilityService
             $query->where('id', '<>', $ignoreBookingId);
         }
 
-        if ($query->exists()) {
+        $maintenanceQuery = \\App\\Models\\VehicleMaintenanceRecord::where('car_id', $carId)
+            ->where('blocks_rental', true)
+            ->whereIn('status', ['scheduled', 'in_progress'])
+            ->where(function ($q) use ($endDate) {
+                $q->whereNull('scheduled_for')->orWhere('scheduled_for', '<', $endDate);
+            });
+        if ($query->exists() || $maintenanceQuery->exists()) {
             throw ValidationException::withMessages([
                 'startDate' => ['This vehicle is already booked for some or all of the selected dates. Please choose different dates.'],
             ]);
@@ -37,10 +43,16 @@ class BookingAvailabilityService
 
     public function isAvailable(int $carId, string $startDate, string $endDate): bool
     {
-        return !Booking::where('car_id', $carId)
+        $bookingOverlap = Booking::where('car_id', $carId)
             ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
             ->where('startDate', '<', $endDate)
-            ->where('endDate', '>', $startDate)
-            ->exists();
+            ->where('endDate', '>', $startDate)->exists();
+        $maintenanceBlock = \\App\\Models\\VehicleMaintenanceRecord::where('car_id', $carId)
+            ->where('blocks_rental', true)
+            ->whereIn('status', ['scheduled', 'in_progress'])
+            ->where(function ($q) use ($endDate) {
+                $q->whereNull('scheduled_for')->orWhere('scheduled_for', '<', $endDate);
+            })->exists();
+        return !$bookingOverlap && !$maintenanceBlock;
     }
 }
