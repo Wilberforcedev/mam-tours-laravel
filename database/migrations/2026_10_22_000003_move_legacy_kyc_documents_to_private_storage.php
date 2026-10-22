@@ -8,7 +8,7 @@ class MoveLegacyKycDocumentsToPrivateStorage extends Migration
 {
     public function up()
     {
-        if (!\\Illuminate\\Support\\Facades\\Schema::hasTable('kyc_verifications')) {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('kyc_verifications')) {
             return;
         }
 
