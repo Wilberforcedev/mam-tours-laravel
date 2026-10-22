@@ -26,7 +26,7 @@ class BookingAvailabilityService
             $query->where('id', '<>', $ignoreBookingId);
         }
 
-        $maintenanceQuery = \\App\\Models\\VehicleMaintenanceRecord::where('car_id', $carId)
+        $maintenanceQuery = \App\Models\VehicleMaintenanceRecord::where('car_id', $carId)
             ->where('blocks_rental', true)
             ->whereIn('status', ['scheduled', 'in_progress'])
             ->where(function ($q) use ($endDate) {
@@ -47,7 +47,7 @@ class BookingAvailabilityService
             ->whereIn('status', ['pending', 'reserved', 'confirmed', 'in_use'])
             ->where('startDate', '<', $endDate)
             ->where('endDate', '>', $startDate)->exists();
-        $maintenanceBlock = \\App\\Models\\VehicleMaintenanceRecord::where('car_id', $carId)
+        $maintenanceBlock = \App\Models\VehicleMaintenanceRecord::where('car_id', $carId)
             ->where('blocks_rental', true)
             ->whereIn('status', ['scheduled', 'in_progress'])
             ->where(function ($q) use ($endDate) {
