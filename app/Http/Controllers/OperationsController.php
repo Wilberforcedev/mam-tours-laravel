@@ -13,9 +13,9 @@ class OperationsController extends Controller
     public function maintenanceIndex(Request $request)
     {
         $query = VehicleMaintenanceRecord::with('car')->orderByDesc('scheduled_for');
-        if ($request->filled('car_id')) $query->where('car_id', $request->integer('car_id'));
+        if ($request->filled('car_id')) $query->where('car_id', (int) $request->input('car_id'));
         if ($request->filled('status')) $query->where('status', $request->input('status'));
-        return response()->json($query->paginate(min(100, max(1, $request->integer('per_page', 20)))));
+        return response()->json($query->paginate(min(100, max(1, (int) $request->input('per_page', 20)))));
     }
 
     public function maintenanceStore(Request $request)
