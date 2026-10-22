@@ -9,6 +9,7 @@ return [
     'weekend_surcharge_rate' => (float) env('RENTAL_WEEKEND_SURCHARGE_RATE', 0.10),
     'weekly_discount_rate' => (float) env('RENTAL_WEEKLY_DISCOUNT_RATE', 0.10),
     'additional_driver_daily_fee' => (int) env('RENTAL_ADDITIONAL_DRIVER_DAILY_FEE', 50000),
+    'delivery_fee' => (int) env('RENTAL_DELIVERY_FEE', 0),
     'child_seat_daily_fee' => (int) env('RENTAL_CHILD_SEAT_DAILY_FEE', 10000),
     'tax_rate' => (float) env('RENTAL_TAX_RATE', 0.18),
     'deposit_rate' => (float) env('RENTAL_DEPOSIT_RATE', 0.20),
