@@ -104,8 +104,8 @@ class OperationsController extends Controller
         ])->validate();
 
         $query = FinancialTransaction::whereBetween(DB::raw('DATE(COALESCE(occurred_at, created_at))'), [$from, $to]);
-        $totals = (clone $query)->select('currency', 'type', 'status', DB::raw('SUM(amount_minor) as amount_minor'), DB::raw('COUNT(*) as transactions'))
-            ->groupBy('currency', 'type', 'status')->get();
+        $totals = (clone $query)->select('currency', 'type', 'direction', 'status', DB::raw('SUM(amount_minor) as amount_minor'), DB::raw('COUNT(*) as transactions'))
+            ->groupBy('currency', 'type', 'direction', 'status')->get();
 
         return response()->json([
             'period' => ['from' => $from, 'to' => $to],
@@ -220,7 +220,9 @@ class OperationsController extends Controller
                     ->where('type', 'payment')->sum('amount_minor');
                 $refunded = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
                     ->where('type', 'refund')->sum('amount_minor');
-                return ['booking_id' => $booking->id, 'currency' => $currency, 'outstanding_minor_units' => max(0, $quoted - $paid + $refunded)];
+                $adjustmentDebits = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')->where('type', 'adjustment')->where('direction', 'debit')->sum('amount_minor');
+                $adjustmentCredits = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')->where('type', 'adjustment')->where('direction', 'credit')->sum('amount_minor');
+                return ['booking_id' => $booking->id, 'currency' => $currency, 'outstanding_minor_units' => max(0, $quoted - $paid + $refunded + $adjustmentDebits - $adjustmentCredits)];
             })->filter(fn ($item) => $item['outstanding_minor_units'] > 0)->values();
 
         return response()->json([
@@ -265,6 +267,7 @@ class OperationsController extends Controller
         $data = $request->validate([
             'booking_id' => 'required|exists:bookings,id',
             'type' => 'required|in:payment,deposit_received,deposit_returned,adjustment',
+            'direction' => 'required_if:type,adjustment|nullable|in:debit,credit',
             'amount_minor' => 'required|integer|min:1',
             'currency' => 'required|string|in:UGX,USD,ugx,usd',
             'provider' => 'required|in:cash,bank_transfer,manual',
@@ -298,6 +301,7 @@ class OperationsController extends Controller
                     'booking_id' => $booking->id,
                     'user_id' => $request->user()->id,
                     'type' => $data['type'],
+                    'direction' => $data['direction'] ?? null,
                     'status' => 'completed',
                     'amount_minor' => $data['amount_minor'],
                     'currency' => $currency,
@@ -307,13 +311,15 @@ class OperationsController extends Controller
                     'metadata' => ['notes' => $data['notes'] ?? null, 'recorded_by' => $request->user()->id],
                     'occurred_at' => now(),
                 ]);
-                if ($data['type'] === 'payment') {
+                if ($data['type'] === 'payment' || $data['type'] === 'adjustment') {
                     $quotedMinor = (int) round(((float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0)) * 100);
                     $paidMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
                         ->where('type', 'payment')->sum('amount_minor');
                     $refundedMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
                         ->where('type', 'refund')->sum('amount_minor');
-                    $status = ($paidMinor - $refundedMinor) >= $quotedMinor ? 'completed' : 'partially_paid';
+                    $adjustmentDebits = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')->where('type', 'adjustment')->where('direction', 'debit')->sum('amount_minor');
+                    $adjustmentCredits = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')->where('type', 'adjustment')->where('direction', 'credit')->sum('amount_minor');
+                    $status = ($paidMinor - $refundedMinor + $adjustmentCredits - $adjustmentDebits) >= $quotedMinor ? 'completed' : 'partially_paid';
                     $booking->update([
                         'payment_method' => $data['provider'],
                         'payment_status' => $status,
