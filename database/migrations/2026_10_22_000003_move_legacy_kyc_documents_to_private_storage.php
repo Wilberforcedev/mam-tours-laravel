@@ -8,6 +8,10 @@ class MoveLegacyKycDocumentsToPrivateStorage extends Migration
 {
     public function up()
     {
+        if (!\\Illuminate\\Support\\Facades\\Schema::hasTable('kyc_verifications')) {
+            return;
+        }
+
         $diskPublic = Storage::disk('public');
         $diskPrivate = Storage::disk('private');
         $columns = ['id_document_path', 'permit_document_path', 'id_original_document_path', 'permit_original_document_path'];
