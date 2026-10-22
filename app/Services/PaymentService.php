@@ -122,6 +122,56 @@ class PaymentService
                 return false;
             }
 
+            if (in_array($booking->status, ['canceled', 'cancelled', 'expired'], true)) {
+                // A payment may complete after a customer/admin cancels the booking.
+                // Record the captured funds first so a failed refund remains visible to finance.
+                DB::transaction(function () use ($booking, $paymentIntentId, $expectedCurrency) {
+                    $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                    $payment = array_merge($locked->payment ?? [], [
+                        'stripe_payment_intent' => $paymentIntentId,
+                        'amount' => $this->calculateTotalAmount($locked),
+                        'currency' => strtoupper($expectedCurrency),
+                        'completed_at' => now(),
+                    ]);
+                    $locked->update(['payment_method' => 'stripe', 'payment_status' => 'completed', 'payment' => $payment]);
+                    FinancialTransaction::firstOrCreate(
+                        ['provider_reference' => $paymentIntentId],
+                        [
+                            'booking_id' => $locked->id, 'user_id' => $locked->user_id,
+                            'type' => 'payment', 'status' => 'completed',
+                            'amount_minor' => $this->toStripeAmount($this->calculateTotalAmount($locked), $expectedCurrency),
+                            'currency' => strtoupper($expectedCurrency), 'provider' => 'stripe',
+                            'idempotency_key' => 'stripe-payment-' . $paymentIntentId, 'occurred_at' => now(),
+                        ]
+                    );
+                });
+
+                try {
+                    $refund = \Stripe\Refund::create([
+                        'payment_intent' => $paymentIntentId,
+                        'reason' => 'requested_by_customer',
+                    ], ['idempotency_key' => 'mam-booking-' . $booking->id . '-canceled-auto-refund-v1']);
+                    DB::transaction(function () use ($booking, $refund, $expectedCurrency) {
+                        $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                        $payment = array_merge($locked->payment ?? [], ['refund_id' => $refund->id, 'refunded_at' => now()]);
+                        $locked->update(['payment_status' => 'refunded', 'payment' => $payment]);
+                        FinancialTransaction::firstOrCreate(
+                            ['provider_reference' => $refund->id],
+                            [
+                                'booking_id' => $locked->id, 'user_id' => $locked->user_id,
+                                'type' => 'refund', 'status' => 'completed',
+                                'amount_minor' => $this->toStripeAmount($this->calculateTotalAmount($locked), $expectedCurrency),
+                                'currency' => strtoupper($expectedCurrency), 'provider' => 'stripe',
+                                'idempotency_key' => 'stripe-refund-' . $refund->id, 'occurred_at' => now(),
+                            ]
+                        );
+                    });
+                } catch (ApiErrorException $refundError) {
+                    Log::error('Automatic refund failed for canceled booking', ['booking_id' => $booking->id]);
+                }
+                return false;
+            }
+
             DB::transaction(function () use ($booking, $paymentIntentId, $paymentIntent, $expectedCurrency) {
                 $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
                 if ($locked->payment_status === 'completed') {
