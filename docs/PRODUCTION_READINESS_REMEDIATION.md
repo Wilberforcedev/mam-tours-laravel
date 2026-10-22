@@ -35,8 +35,8 @@ This branch implements an initial production-hardening and operations foundation
 ## Important limitations / deployment gates
 
 1. **Real payment credentials and providers:** Stripe is disabled by default. Configure `STRIPE_ENABLED=true`, `STRIPE_CURRENCY`, and secret keys only after verifying the live Stripe account supports the selected currency and completing test-mode end-to-end checks. The amount adapter currently uses two-decimal API units for UGX/USD; do not select other currencies without implementing and testing their minor-unit rules.
-2. **Mobile money:** MTN and Airtel adapters are not implemented. Mobile money deliberately fails safely and must remain disabled until a real provider integration, request signing, status reconciliation, and webhook tests are completed.
-3. **Refund scope:** automated provider refunds currently cover Stripe only. Cash/bank refunds must be recorded by finance after the actual transfer is verified. Deposit liability/release and partial-refund policies still require formal business rules.
+2. **Mobile money activation:** the IntaSend adapter is implemented but disabled by default. It requires an approved IntaSend account, secret key, a strong webhook challenge configured both in IntaSend and hosting secrets, live account activation for Uganda mobile money push, and successful sandbox/UAT tests before `INTASEND_ENABLED=true`.
+3. **Refund scope:** automated provider refunds currently cover Stripe only. Mobile-money and cash/bank refunds must be transferred through the approved provider/bank workflow and then recorded by finance after the actual transfer is verified. Deposit liability/release and partial-refund policies still require formal business rules.
 4. **External notifications:** the existing email notification service logs messages in development mode; it is not proof of real email delivery. Configure and test the production mail/SMS provider before relying on reminders or receipts.
 5. **Financial reconciliation:** ledger endpoints provide a foundation, but bank statement imports, provider settlement reconciliation, deposit accounting, and a full accounting export still need implementation.
 6. **Fleet operations:** the maintenance record is a simple operational record; no third-party insurance/licence registry integration or automated maintenance-cost profitability accounting is included.
@@ -54,6 +54,8 @@ This branch implements an initial production-hardening and operations foundation
 - `POST /api/operations/transactions` — append a cash/bank/manual ledger transaction (finance/admin).
 - `GET /api/operations/transactions/{id}/receipt` — download a receipt for a completed transaction (finance/admin).
 - `POST /api/operations/bookings/{id}/refund` — Stripe refund request for a canceled paid booking (finance/admin).
+- `POST /api/webhooks/stripe` — Stripe-signed payment webhook.
+- `POST /api/webhooks/intasend` — IntaSend challenge-verified mobile-money webhook.
 - `PUT /api/admin/users/{id}/role` — assign an approved staff/customer role (admin).
 
 Do not accept live payments or merge into production until staging tests pass and the provider integrations above are configured.
