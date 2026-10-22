@@ -31,6 +31,9 @@ class PaymentService
             $amount = $this->calculateTotalAmount($booking);
             $currency = strtolower((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
             $providerCurrency = strtolower((string) config('services.stripe.currency', ''));
+            if (!in_array($currency, ['ugx', 'usd'], true)) {
+                return ['success' => false, 'error' => 'This currency is not supported by the configured payment adapter. No payment was initiated.'];
+            }
             if (!$providerCurrency || $currency !== $providerCurrency) {
                 return ['success' => false, 'error' => 'The configured payment currency does not match this booking. No payment was initiated.'];
             }
@@ -103,6 +106,9 @@ class PaymentService
             $paymentIntent = PaymentIntent::retrieve($paymentIntentId);
             
             $expectedCurrency = strtolower((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
+            if (!in_array($expectedCurrency, ['ugx', 'usd'], true)) {
+                return false;
+            }
             $expectedAmount = $this->toStripeAmount($this->calculateTotalAmount($booking), $expectedCurrency);
             if ($paymentIntent->status !== 'succeeded'
                 || (string) ($paymentIntent->metadata->booking_id ?? '') !== (string) $booking->id
