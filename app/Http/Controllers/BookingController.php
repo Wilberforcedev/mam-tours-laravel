@@ -36,7 +36,7 @@ class BookingController extends Controller
     {
         $user = auth()->user();
 
-        // Only administrators may list all customer bookings.
+        // Customers see their own bookings; authorized staff see the booking queue.
         $staffCanViewAll = $user && in_array($user->role, ['admin', 'booking', 'finance'], true);
         $bookings = $staffCanViewAll
             ? Booking::with('car')->latest()->get()
@@ -274,6 +274,7 @@ class BookingController extends Controller
 
                 return Booking::create([
                     'car_id' => $validated['carId'],
+                    'user_id' => auth()->id(),
                     'customerName' => $validated['customerName'],
                     'startDate' => $pickupAt,
                     'endDate' => $returnAt,
@@ -311,6 +312,10 @@ class BookingController extends Controller
         }
         if (!in_array($booking->status, ['pending', 'reserved'])) {
             return response()->json(['error' => 'Booking must be pending or reserved to confirm'], 400);
+        }
+        if ($booking->expiresAt && $booking->expiresAt->isPast()) {
+            $booking->update(['status' => 'expired']);
+            return response()->json(['error' => 'Booking reservation has expired. Please select dates again.'], 400);
         }
 
         $booking->update([
