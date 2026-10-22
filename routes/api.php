@@ -213,6 +213,8 @@ Route::prefix('v2')->middleware('api.version:v2')->group(function () {
 
 // Stripe's provider-signed webhook is public but validates Stripe-Signature.
 Route::post('/webhooks/stripe', [\App\Http\Controllers\PaymentController::class, 'stripeWebhook']);
+// IntaSend callbacks validate the dashboard-configured challenge value.
+Route::post('/webhooks/intasend', [\App\Http\Controllers\PaymentController::class, 'intaSendWebhook']);
 
 // Webhook Routes
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
