@@ -104,11 +104,22 @@ class OperationsController extends Controller
 
         $bookings = \App\Models\Booking::with('car')
             ->whereDate('created_at', '>=', $from)->whereDate('created_at', '<=', $to)->get();
-        $revenue = $bookings->where('payment_status', 'completed')->sum(function ($booking) {
-            return (float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0);
-        });
-        $cashCollected = FinancialTransaction::where('type', 'payment')->where('status', 'completed')
-            ->whereBetween(DB::raw('DATE(COALESCE(occurred_at, created_at))'), [$from, $to])->sum('amount_minor');
+        $paidBookings = $bookings->where('payment_status', 'completed');
+        $revenueByCurrency = $paidBookings->groupBy(function ($booking) {
+            return strtoupper((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
+        })->map(function ($items, $currency) {
+            return [
+                'currency' => $currency,
+                'amount' => $items->sum(function ($booking) {
+                    return (float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0);
+                }),
+                'bookings' => $items->count(),
+            ];
+        })->values();
+        $cashCollectedByCurrency = FinancialTransaction::where('type', 'payment')->where('status', 'completed')
+            ->whereBetween(DB::raw('DATE(COALESCE(occurred_at, created_at))'), [$from, $to])
+            ->select('currency', DB::raw('SUM(amount_minor) as amount_minor'), DB::raw('COUNT(*) as transactions'))
+            ->groupBy('currency')->get();
         $fleet = Car::withCount(['bookings as active_bookings' => function ($q) {
             $q->whereIn('status', ['confirmed', 'in_use']);
         }])->get();
@@ -117,11 +128,27 @@ class OperationsController extends Controller
             'period' => ['from' => $from, 'to' => $to],
             'booking_count' => $bookings->count(),
             'cancellations' => $bookings->where('status', 'canceled')->count(),
-            'completed_paid_booking_value' => $revenue,
-            'ledger_cash_collected_minor_units' => (int) $cashCollected,
+            'completed_paid_booking_value_by_currency' => $revenueByCurrency,
+            'ledger_cash_collected_minor_units_by_currency' => $cashCollectedByCurrency,
             'fleet' => $fleet,
             'note' => 'Booking values are in quoted currency; ledger collection is in minor units and must be interpreted by currency.',
         ]);
+    }
+
+    public function refundBooking(Request $request, $id)
+    {
+        $booking = \\App\\Models\\Booking::findOrFail($id);
+        if ($booking->status !== 'canceled') {
+            return response()->json(['message' => 'Cancel the booking before requesting a refund.'], 422);
+        }
+        if ($booking->payment_status !== 'completed') {
+            return response()->json(['message' => 'Only completed payments can be refunded.'], 422);
+        }
+        $result = app(\\App\\Services\\PaymentService::class)->processRefund($booking);
+        if (empty($result['success'])) {
+            return response()->json(['message' => $result['error'] ?? 'Refund could not be processed.'], 422);
+        }
+        return response()->json(['message' => 'Refund submitted to the payment provider.', 'refund_reference' => $result['refund_id'] ?? null]);
     }
 
     public function updateStaffRole(Request $request, $id)
