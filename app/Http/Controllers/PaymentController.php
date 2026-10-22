@@ -151,7 +151,8 @@ class PaymentController extends Controller
 
         $result = $this->paymentService->processMobileMoneyPayment(
             $booking,
-            $request->phone_number
+            $request->phone_number,
+            $request->provider
         );
 
         if ($result['success']) {
