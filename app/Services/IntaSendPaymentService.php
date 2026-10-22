@@ -20,6 +20,9 @@ class IntaSendPaymentService
         if ($currency !== 'UGX') {
             return ['success' => false, 'error' => 'MTN/Airtel mobile money currently requires UGX for this integration.'];
         }
+        if (!in_array($booking->payment_method, ['mtn_mobile_money', 'airtel_money', 'mobile_money'], true)) {
+            return ['success' => false, 'error' => 'This booking was not created for mobile money payment.'];
+        }
         if (in_array($booking->status, ['canceled', 'cancelled', 'expired', 'completed', 'returned'], true)
             || in_array($booking->payment_status, ['completed', 'refunded'], true)) {
             return ['success' => false, 'error' => 'This booking is not eligible for a new payment.'];
