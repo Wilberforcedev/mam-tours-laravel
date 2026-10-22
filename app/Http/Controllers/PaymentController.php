@@ -279,8 +279,9 @@ class PaymentController extends Controller
             return response()->json(['received' => true]);
         }
 
-        $confirmedBooking = \Illuminate\Support\Facades\DB::transaction(function () use ($booking, $payload, $invoiceId, $apiReference, $state, $expectedAmount) {
+        $confirmationResult = \Illuminate\Support\Facades\DB::transaction(function () use ($booking, $payload, $invoiceId, $apiReference, $state, $expectedAmount) {
             $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+            $newlyCompleted = false;
             $payment = array_merge($locked->payment ?? [], [
                 'provider' => 'intasend',
                 'provider_invoice_id' => $invoiceId,
@@ -293,6 +294,7 @@ class PaymentController extends Controller
             if ($state === 'COMPLETE') {
                 if ($locked->payment_status !== 'completed') {
                     $locked->update(['payment_method' => 'mobile_money', 'payment_status' => 'completed', 'payment' => $payment]);
+                    $newlyCompleted = true;
                     \App\Models\FinancialTransaction::firstOrCreate(
                         ['provider_reference' => $invoiceId],
                         [
@@ -316,11 +318,11 @@ class PaymentController extends Controller
             } else {
                 $locked->update(['payment' => $payment]);
             }
-            return $locked->fresh();
+            return ['booking' => $locked->fresh(), 'newly_completed' => $newlyCompleted];
         });
 
-        if ($state === 'COMPLETE' && $confirmedBooking && $confirmedBooking->payment_status === 'completed') {
-            $this->notificationService->sendPaymentConfirmation($confirmedBooking);
+        if ($state === 'COMPLETE' && $confirmationResult['newly_completed']) {
+            $this->notificationService->sendPaymentConfirmation($confirmationResult['booking']);
         }
         return response()->json(['received' => true]);
     }
