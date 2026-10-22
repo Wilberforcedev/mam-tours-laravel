@@ -59,6 +59,10 @@ class BookingController extends Controller
                 'idType' => 'nullable|in:nin,passport',
                 'idNumber' => 'nullable|string|max:50',
                 'idDocument' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+                'addOns' => 'nullable|array',
+                'addOns.driver' => 'nullable|boolean',
+                'addOns.childSeat' => 'nullable|boolean',
+                'addOns.delivery' => 'nullable|boolean',
             ]);
 
             // Check if user is trying to use cashless payment without ID verification
@@ -81,12 +85,18 @@ class BookingController extends Controller
                 ->where('startDate', '<', $validated['endDate'])
                 ->where('endDate', '>', $validated['startDate'])
                 ->exists();
-            if ($overlap) {
+            $maintenanceBlock = \\App\\Models\\VehicleMaintenanceRecord::where('car_id', $car->id)
+                ->where('blocks_rental', true)
+                ->whereIn('status', ['scheduled', 'in_progress'])
+                ->where(function ($q) use ($validated) {
+                    $q->whereNull('scheduled_for')->orWhere('scheduled_for', '<', $validated['endDate']);
+                })->exists();
+            if ($overlap || $maintenanceBlock) {
                 \Illuminate\Support\Facades\DB::rollBack();
                 return response()->json(['message' => 'Vehicle is already booked for the selected dates.'], 409);
             }
 
-            $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], []);
+            $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], $validated['addOns'] ?? []);
 
             // Handle file upload
             $idDocumentPath = null;
@@ -184,6 +194,9 @@ class BookingController extends Controller
             if (\Illuminate\Support\Facades\DB::transactionLevel() > 0) { \Illuminate\Support\Facades\DB::rollBack(); }
             \Log::warning('Booking validation failed.');
             return response()->json(['message' => 'Validation failed', 'errors' => $e->errors()], 422);
+        } catch (\InvalidArgumentException $e) {
+            if (\Illuminate\Support\Facades\DB::transactionLevel() > 0) { \Illuminate\Support\Facades\DB::rollBack(); }
+            return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Exception $e) {
             if (\Illuminate\Support\Facades\DB::transactionLevel() > 0) { \Illuminate\Support\Facades\DB::rollBack(); }
             \Log::error('Booking creation failed.', ['exception_class' => get_class($e)]);
