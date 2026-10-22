@@ -84,6 +84,9 @@ Route::get('/health', function() {
 // Images
 Route::get('/images', [CarController::class, 'getImages']);
 
+// Date-based availability and a customer-facing quotation.
+Route::get('/availability', [\App\Http\Controllers\AvailabilityController::class, 'check']);
+
 // Public Cars API (read-only)
 Route::get('/cars', [CarController::class, 'index']);
 Route::get('/cars/{id}', [CarController::class, 'show']);
@@ -103,8 +106,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bookings/{id}/confirm', [BookingController::class, 'confirm']);
     Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
     
-    // Admin-only booking operations
-    Route::middleware('admin')->group(function () {
+    // Fleet staff manage physical vehicle handover and return.
+    Route::middleware('role:fleet')->group(function () {
         Route::post('/bookings/{id}/check-out', [BookingController::class, 'checkout']);
         Route::put('/bookings/{id}/return', [BookingController::class, 'returnVehicle']);
     });
@@ -112,17 +115,47 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Public Bookings API (unauthenticated users can submit bookings)
 Route::post('/bookings', [BookingController::class, 'store']);
+Route::middleware(['auth:sanctum', 'admin'])->get('/admin/bookings/{id}/identity-document', [BookingController::class, 'downloadIdentityDocument']);
 
-// Payment stubs (for compatibility)
-Route::post('/payments/intent', function(Request $request) {
-    return response()->json(['message' => 'Payment authorized', 'status' => 'authorized']);
+// Payment endpoints are deliberately unavailable until a real provider workflow
+// verifies amounts, currency, ownership, provider signatures, and final status.
+Route::post('/payments/intent', function () {
+    return response()->json([
+        'message' => 'Payment processing is not configured. No payment was taken.',
+        'status' => 'unavailable',
+    ], 501);
 });
-Route::post('/payments/capture/{id}', function($id) {
-    return response()->json(['message' => 'Payment captured']);
+Route::post('/payments/capture/{id}', function () {
+    return response()->json([
+        'message' => 'Payment capture is not configured. No payment was captured.',
+        'status' => 'unavailable',
+    ], 501);
 });
-Route::post('/payments/refund/{id}', function($id) {
-    return response()->json(['message' => 'Payment refunded']);
+Route::post('/payments/refund/{id}', function () {
+    return response()->json([
+        'message' => 'Refund processing is not configured. No refund was issued.',
+        'status' => 'unavailable',
+    ], 501);
 });
+
+// Staff operations: least-privilege access by role.
+Route::middleware(['auth:sanctum', 'role:fleet'])->prefix('operations')->group(function () {
+    Route::get('/maintenance', [\App\Http\Controllers\OperationsController::class, 'maintenanceIndex']);
+    Route::post('/maintenance', [\App\Http\Controllers\OperationsController::class, 'maintenanceStore']);
+    Route::put('/maintenance/{id}', [\App\Http\Controllers\OperationsController::class, 'maintenanceUpdate']);
+});
+
+Route::middleware(['auth:sanctum', 'role:finance'])->prefix('operations')->group(function () {
+    Route::get('/reports/financial-summary', [\App\Http\Controllers\OperationsController::class, 'financialSummary']);
+    Route::get('/reports/bookings', [\App\Http\Controllers\OperationsController::class, 'bookingsReport']);
+    Route::get('/reports/management-summary', [\App\Http\Controllers\OperationsController::class, 'managementSummary']);
+    Route::post('/bookings/{id}/refund', [\App\Http\Controllers\OperationsController::class, 'refundBooking']);
+    Route::get('/transactions', [\App\Http\Controllers\OperationsController::class, 'transactionsIndex']);
+    Route::get('/transactions/{id}/receipt', [\App\Http\Controllers\OperationsController::class, 'transactionReceipt']);
+    Route::post('/transactions', [\App\Http\Controllers\OperationsController::class, 'recordFinancialTransaction']);
+});
+
+Route::middleware(['auth:sanctum', 'admin'])->put('/admin/users/{id}/role', [\App\Http\Controllers\OperationsController::class, 'updateStaffRole']);
 
 // Protected Reports (admin only)
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
@@ -178,6 +211,11 @@ Route::prefix('v2')->middleware('api.version:v2')->group(function () {
     Route::get('/cars/search', [\App\Http\Controllers\Api\V2\CarApiController::class, 'search']);
 });
 
+// Stripe's provider-signed webhook is public but validates Stripe-Signature.
+Route::post('/webhooks/stripe', [\App\Http\Controllers\PaymentController::class, 'stripeWebhook']);
+// IntaSend callbacks validate the dashboard-configured challenge value.
+Route::post('/webhooks/intasend', [\App\Http\Controllers\PaymentController::class, 'intaSendWebhook']);
+
 // Webhook Routes
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/webhooks/register', [\App\Http\Controllers\WebhookController::class, 'register']);
@@ -189,37 +227,7 @@ Route::post('/webhooks/receive', [\App\Http\Controllers\WebhookController::class
 // API Documentation
 Route::get('/docs/spec', [\App\Http\Controllers\ApiDocController::class, 'spec']);
 
-// Test Upload Endpoint (for debugging)
-Route::post('/test-upload', function (Request $request) {
-    try {
-        $request->validate([
-            'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120'
-        ]);
-        
-        if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $path = $file->store('test-uploads', 'public');
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'File uploaded successfully',
-                'file' => [
-                    'name' => $file->getClientOriginalName(),
-                    'size' => $file->getSize(),
-                    'path' => $path,
-                    'url' => asset('storage/' . $path)
-                ]
-            ]);
-        }
-        
-        return response()->json(['success' => false, 'message' => 'No file provided'], 400);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => $e->getMessage()
-        ], 500);
-    }
-});
+// Public test-upload endpoint removed; uploads must use authenticated workflows.
 
 // KYC API v2 Routes
 Route::prefix('v2')->middleware('api.version:v2')->group(function () {

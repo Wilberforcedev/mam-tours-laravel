@@ -6,11 +6,11 @@ Quick checklist before you deploy to production.
 
 CODE READY?
 
-☑ All test files removed
-☑ All guide/documentation files cleaned up
+□ Automated test suite reviewed and passing
+□ Deployment documentation matches actual provider configuration
 ☑ README humanized and updated
 ☑ Deployment scripts ready
-□ All features tested locally
+□ All features tested in staging, including concurrent booking attempts
 □ No console.log() or dd() left in code
 □ Error handling in place
 
@@ -31,7 +31,9 @@ DATABASE
 
 □ Production database created
 □ Database credentials ready
-□ Migrations tested
+□ Migrations tested against a production-like copy
+□ Database and public/private storage backed up before migrations
+□ Legacy identity-document migration reviewed
 □ Seeder ready (optional)
 □ Admin user creation command tested
 
@@ -40,10 +42,14 @@ DATABASE
 THIRD-PARTY SERVICES
 
 Payment (Required)
-□ Stripe account created
-□ Live API keys obtained (not test keys!)
-□ Webhook endpoint configured
-□ Test transaction completed
+□ Stripe account/currency support verified before enabling card payments
+□ Stripe keys stored in hosting secrets
+□ Stripe webhook configured at /api/webhooks/stripe
+□ IntaSend live account activated for Uganda MTN/Airtel push
+□ IntaSend secret key and webhook challenge stored in hosting secrets
+□ IntaSend webhook configured at /api/webhooks/intasend
+□ Provider-confirmed test payment and refund/reconciliation completed in staging
+□ Payment amounts, currency, receipts, and ledger entries reconciled
 
 Email (Required)
 □ Email service chosen (Mailgun, SendGrid, etc.)
@@ -71,7 +77,8 @@ SECURITY
 □ HTTPS/SSL certificate ready
 □ SESSION_SECURE_COOKIE=true (requires HTTPS)
 □ No default admin account is seeded
-□ Webhook secrets generated
+□ Stripe webhook signing secret and IntaSend challenge generated
+□ Payment provider flags remain disabled until UAT passes
 □ CORS settings configured
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -80,6 +87,7 @@ PERFORMANCE
 
 □ Redis available (recommended) or fallback to file/database
 □ Queue worker strategy decided
+□ Laravel scheduler running every minute for hold expiry and fleet reminders
 □ Caching strategy decided
 □ CDN considered for static assets (optional)
 
@@ -151,4 +159,4 @@ NEED HELP?
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Ready to deploy? Make sure everything is checked off above!
+Do not deploy or accept live payments while critical checks remain unchecked. Stripe and IntaSend are disabled by default and require provider credentials, account activation, and staging verification.

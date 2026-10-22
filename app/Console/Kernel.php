@@ -25,9 +25,13 @@ class Kernel extends ConsoleKernel
                 \Log::error('Scheduled database backup failed');
             });
         
+        // Notify fleet/admin staff of service and vehicle-document deadlines daily.
+        $schedule->command('fleet:send-maintenance-reminders')->dailyAt('07:00')->withoutOverlapping();
+
         // Clean up expired bookings daily at 3 AM
         $schedule->call(function () {
-            \App\Models\Booking::where('status', 'pending')
+            \App\Models\Booking::whereIn('status', ['pending', 'reserved'])
+                ->whereNotNull('expiresAt')
                 ->where('expiresAt', '<', now())
                 ->update(['status' => 'expired']);
         })->dailyAt('03:00');

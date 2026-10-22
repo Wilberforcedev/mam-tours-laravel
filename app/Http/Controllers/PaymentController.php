@@ -151,7 +151,8 @@ class PaymentController extends Controller
 
         $result = $this->paymentService->processMobileMoneyPayment(
             $booking,
-            $request->phone_number
+            $request->phone_number,
+            $request->provider
         );
 
         if ($result['success']) {
@@ -226,6 +227,163 @@ class PaymentController extends Controller
         $this->notificationService->sendPaymentConfirmation($booking);
 
         return response()->json(['status' => 'received']);
+    }
+
+    /**
+     * IntaSend sends the configured challenge in each webhook. Match api_ref, invoice,
+     * amount and currency before recording payment; never trust state alone.
+     */
+    public function intaSendWebhook(Request $request)
+    {
+        $challengeSecret = config('services.intasend.webhook_challenge');
+        if (!$challengeSecret) {
+            return response()->json(['error' => 'IntaSend webhook is not configured'], 503);
+        }
+        $challenge = (string) $request->input('challenge', '');
+        if ($challenge === '' || !hash_equals((string) $challengeSecret, $challenge)) {
+            return response()->json(['error' => 'Invalid webhook challenge'], 401);
+        }
+
+        $payload = $request->all();
+        if (($payload['topic'] ?? '') !== 'collection_event') {
+            return response()->json(['received' => true]);
+        }
+
+        $apiReference = (string) ($payload['api_ref'] ?? '');
+        $invoiceId = (string) ($payload['invoice_id'] ?? '');
+        $state = strtoupper((string) ($payload['state'] ?? ''));
+        if ($apiReference === '' || $invoiceId === '') {
+            return response()->json(['received' => true]);
+        }
+
+        $booking = Booking::where('payment->provider_api_reference', $apiReference)->first();
+        if (!$booking) {
+            \Illuminate\Support\Facades\Log::warning('IntaSend callback references unknown booking', ['invoice_id' => $invoiceId]);
+            return response()->json(['received' => true]);
+        }
+
+        $expectedAmount = (int) round((float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0));
+        $receivedAmount = (int) round((float) ($payload['value'] ?? 0));
+        $currency = strtoupper((string) ($payload['currency'] ?? ''));
+        if ($currency !== 'UGX' || $receivedAmount !== $expectedAmount) {
+            \Illuminate\Support\Facades\Log::warning('IntaSend callback does not match booking quote', [
+                'booking_id' => $booking->id,
+                'invoice_id' => $invoiceId,
+                'currency_matches' => $currency === 'UGX',
+                'amount_matches' => $receivedAmount === $expectedAmount,
+            ]);
+            return response()->json(['received' => true]);
+        }
+
+        if (!in_array($state, ['COMPLETE', 'FAILED', 'CANCELED', 'CANCELLED', 'PENDING', 'PROCESSING', 'RETRY', 'PARTIAL'], true)) {
+            return response()->json(['received' => true]);
+        }
+
+        $confirmationResult = \Illuminate\Support\Facades\DB::transaction(function () use ($booking, $payload, $invoiceId, $apiReference, $state, $expectedAmount) {
+            $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+            if (in_array($locked->payment_status, ['completed', 'refunded'], true)) {
+                return ['booking' => $locked->fresh(), 'newly_completed' => false];
+            }
+            $newlyCompleted = false;
+            $payment = array_merge($locked->payment ?? [], [
+                'provider' => 'intasend',
+                'provider_invoice_id' => $invoiceId,
+                'provider_api_reference' => $apiReference,
+                'provider_reference' => $payload['provider_ref'] ?? null,
+                'provider_state' => $state,
+                'provider_updated_at' => now()->toIso8601String(),
+            ]);
+
+            if ($state === 'COMPLETE') {
+                if ($locked->payment_status !== 'completed') {
+                    $locked->update(['payment_method' => 'mobile_money', 'payment_status' => 'completed', 'payment' => $payment]);
+                    $newlyCompleted = true;
+                    \App\Models\FinancialTransaction::firstOrCreate(
+                        ['provider_reference' => $invoiceId],
+                        [
+                            'booking_id' => $locked->id,
+                            'user_id' => $locked->user_id,
+                            'type' => 'payment',
+                            'status' => 'completed',
+                            'amount_minor' => $expectedAmount * 100,
+                            'currency' => 'UGX',
+                            'provider' => 'intasend',
+                            'idempotency_key' => 'intasend-payment-' . $invoiceId,
+                            'metadata' => ['provider_reference' => $payload['provider_ref'] ?? null, 'api_reference' => $apiReference],
+                            'occurred_at' => now(),
+                        ]
+                    );
+                }
+            } elseif (in_array($state, ['FAILED', 'CANCELED', 'CANCELLED'], true)) {
+                if ($locked->payment_status !== 'completed') {
+                    $locked->update(['payment_status' => 'failed', 'payment' => $payment]);
+                }
+            } else {
+                $locked->update(['payment' => $payment]);
+            }
+            return ['booking' => $locked->fresh(), 'newly_completed' => $newlyCompleted];
+        });
+
+        if ($state === 'COMPLETE' && $confirmationResult['newly_completed']) {
+            $this->notificationService->sendPaymentConfirmation($confirmationResult['booking']);
+        }
+        return response()->json(['received' => true]);
+    }
+
+    /**
+     * Confirm Stripe events using the provider signature, not a client-supplied status.
+     */
+    public function stripeWebhook(Request $request)
+    {
+        $secret = config('services.stripe.webhook.secret');
+        if (!$secret) {
+            return response()->json(['error' => 'Stripe webhook is not configured'], 503);
+        }
+
+        try {
+            $event = \Stripe\Webhook::constructEvent(
+                $request->getContent(),
+                $request->header('Stripe-Signature', ''),
+                $secret
+            );
+        } catch (\UnexpectedValueException $e) {
+            return response()->json(['error' => 'Invalid webhook payload'], 400);
+        } catch (\Stripe\Exception\SignatureVerificationException $e) {
+            return response()->json(['error' => 'Invalid webhook signature'], 400);
+        }
+
+        if ($event->type !== 'payment_intent.succeeded') {
+            return response()->json(['received' => true]);
+        }
+
+        $intent = $event->data->object;
+        $bookingId = $intent->metadata->booking_id ?? null;
+        if (!$bookingId) {
+            \Illuminate\Support\Facades\Log::warning('Stripe succeeded event missing booking metadata', ['event_id' => $event->id]);
+            return response()->json(['received' => true]);
+        }
+
+        $booking = Booking::find($bookingId);
+        if (!$booking) {
+            \Illuminate\Support\Facades\Log::warning('Stripe succeeded event references unknown booking', ['event_id' => $event->id]);
+            return response()->json(['received' => true]);
+        }
+        if (in_array($booking->payment_status, ['completed', 'refunded'], true)) {
+            return response()->json(['received' => true]);
+        }
+
+        $confirmed = $this->paymentService->confirmStripePayment($intent->id, $booking);
+        if ($confirmed) {
+            $this->notificationService->sendPaymentConfirmation($booking->fresh());
+        } else {
+            \Illuminate\Support\Facades\Log::warning('Stripe event did not match booking quote', [
+                'event_id' => $event->id,
+                'booking_id' => $booking->id,
+            ]);
+        }
+
+        // Return 200 after signature validation to avoid retrying a permanently mismatched event forever.
+        return response()->json(['received' => true]);
     }
 
     /**

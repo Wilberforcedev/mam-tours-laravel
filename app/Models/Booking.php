@@ -9,6 +9,8 @@ class Booking extends Model
 {
     use HasFactory;
 
+    protected $hidden = ['idNumber', 'idDocument', 'payment'];
+
     protected $fillable = [
         'car_id',
         'user_id',
@@ -38,6 +40,14 @@ class Booking extends Model
         'idType',
         'idNumber',
         'idDocument',
+        'pickup_odometer_km',
+        'return_odometer_km',
+        'pickup_fuel_percent',
+        'return_fuel_percent',
+        'pickup_condition_notes',
+        'return_condition_notes',
+        'pickup_time',
+        'return_time',
     ];
 
     protected $casts = [
@@ -52,6 +62,10 @@ class Booking extends Model
         'checkedOutAt' => 'datetime',
         'returnedAt' => 'datetime',
         'canceledAt' => 'datetime',
+        'pickup_odometer_km' => 'integer',
+        'return_odometer_km' => 'integer',
+        'pickup_fuel_percent' => 'integer',
+        'return_fuel_percent' => 'integer',
     ];
 
     public function car()

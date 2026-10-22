@@ -33,9 +33,22 @@ return [
     'stripe' => [
         'key' => env('STRIPE_KEY'),
         'secret' => env('STRIPE_SECRET'),
+        'enabled' => env('STRIPE_ENABLED', false),
+        'currency' => env('STRIPE_CURRENCY', ''),
         'webhook' => [
             'secret' => env('STRIPE_WEBHOOK_SECRET'),
         ],
+    ],
+
+    'mobile_money' => [
+        'enabled' => env('MOBILE_MONEY_ENABLED', false),
+    ],
+
+    'intasend' => [
+        'enabled' => env('INTASEND_ENABLED', false),
+        'secret_key' => env('INTASEND_SECRET_KEY'),
+        'webhook_challenge' => env('INTASEND_WEBHOOK_CHALLENGE'),
+        'base_url' => env('INTASEND_BASE_URL', 'https://api.intasend.com'),
     ],
 
     'twilio' => [

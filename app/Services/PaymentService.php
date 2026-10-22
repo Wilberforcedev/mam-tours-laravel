@@ -7,12 +7,16 @@ use Stripe\Stripe;
 use Stripe\PaymentIntent;
 use Stripe\Exception\ApiErrorException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use App\Models\FinancialTransaction;
 
 class PaymentService
 {
     public function __construct()
     {
-        Stripe::setApiKey(config('services.stripe.secret'));
+        if (config('services.stripe.secret')) {
+            Stripe::setApiKey(config('services.stripe.secret'));
+        }
     }
 
     /**
@@ -21,17 +25,40 @@ class PaymentService
     public function createStripePayment(Booking $booking): array
     {
         try {
+            if (!config('services.stripe.secret') || !config('services.stripe.enabled', false)) {
+                return ['success' => false, 'error' => 'Card payments are not enabled. Please contact MAM Tours.'];
+            }
+            if (($booking->payment_method ?? $booking->paymentMethod) !== 'stripe') {
+                return ['success' => false, 'error' => 'This booking was not created for card payment.'];
+            }
+            if (in_array($booking->status, ['canceled', 'cancelled', 'expired', 'completed', 'returned'], true)
+                || in_array($booking->payment_status, ['completed', 'refunded'], true)) {
+                return ['success' => false, 'error' => 'This booking is not eligible for a new payment.'];
+            }
             $amount = $this->calculateTotalAmount($booking);
-            
+            $currency = strtolower((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
+            $providerCurrency = strtolower((string) config('services.stripe.currency', ''));
+            if (!in_array($currency, ['ugx', 'usd'], true)) {
+                return ['success' => false, 'error' => 'This currency is not supported by the configured payment adapter. No payment was initiated.'];
+            }
+            if (!$providerCurrency || $currency !== $providerCurrency) {
+                return ['success' => false, 'error' => 'The configured payment currency does not match this booking. No payment was initiated.'];
+            }
+            $amountMinor = $this->toStripeAmount($amount, $currency);
+            if ($amountMinor <= 0) {
+                return ['success' => false, 'error' => 'Invalid payment amount.'];
+            }
             $paymentIntent = PaymentIntent::create([
-                'amount' => $amount * 100, // Stripe expects cents
-                'currency' => 'usd',
+                'amount' => $amountMinor,
+                'currency' => $currency,
                 'metadata' => [
                     'booking_id' => $booking->id,
                     'user_id' => $booking->user_id,
                     'car_id' => $booking->car_id,
                 ],
                 'description' => "Car rental booking #{$booking->id}",
+            ], [
+                'idempotency_key' => 'mam-booking-' . $booking->id . '-payment-v1',
             ]);
 
             return [
@@ -47,7 +74,7 @@ class PaymentService
 
             return [
                 'success' => false,
-                'error' => $e->getMessage(),
+                'error' => 'Payment provider request failed. Please try again later.',
             ];
         }
     }
@@ -55,44 +82,9 @@ class PaymentService
     /**
      * Process mobile money payment (MTN/Airtel)
      */
-    public function processMobileMoneyPayment(Booking $booking, string $phoneNumber): array
+    public function processMobileMoneyPayment(Booking $booking, string $phoneNumber, string $provider = 'mtn'): array
     {
-        try {
-            $amount = $this->calculateTotalAmount($booking);
-            
-            // Simulate mobile money API call
-            // In production, integrate with actual mobile money APIs
-            $transactionId = 'MM_' . time() . '_' . $booking->id;
-            
-            // Update booking with mobile money details
-            $booking->update([
-                'payment_method' => 'mobile_money',
-                'payment_status' => 'pending',
-                'mobile_money_number' => $phoneNumber,
-                'payment' => array_merge($booking->payment ?? [], [
-                    'transaction_id' => $transactionId,
-                    'amount' => $amount,
-                    'phone_number' => $phoneNumber,
-                    'initiated_at' => now(),
-                ]),
-            ]);
-
-            return [
-                'success' => true,
-                'transaction_id' => $transactionId,
-                'message' => 'Mobile money payment initiated. Please complete on your phone.',
-            ];
-        } catch (\Exception $e) {
-            Log::error('Mobile money payment failed', [
-                'booking_id' => $booking->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return [
-                'success' => false,
-                'error' => 'Mobile money payment failed. Please try again.',
-            ];
-        }
+        return app(IntaSendPaymentService::class)->initiate($booking, $phoneNumber, $provider);
     }
 
     /**
@@ -101,23 +93,105 @@ class PaymentService
     public function confirmStripePayment(string $paymentIntentId, Booking $booking): bool
     {
         try {
+            if (($booking->payment_method ?? $booking->paymentMethod) !== 'stripe') {
+                return false;
+            }
             $paymentIntent = PaymentIntent::retrieve($paymentIntentId);
             
-            if ($paymentIntent->status === 'succeeded') {
-                $booking->update([
+            $expectedCurrency = strtolower((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
+            if (!in_array($expectedCurrency, ['ugx', 'usd'], true)) {
+                return false;
+            }
+            $expectedAmount = $this->toStripeAmount($this->calculateTotalAmount($booking), $expectedCurrency);
+            if ($paymentIntent->status !== 'succeeded'
+                || (string) ($paymentIntent->metadata->booking_id ?? '') !== (string) $booking->id
+                || strtolower((string) $paymentIntent->currency) !== $expectedCurrency
+                || (int) $paymentIntent->amount !== $expectedAmount) {
+                Log::warning('Stripe payment did not match expected booking details', ['booking_id' => $booking->id]);
+                return false;
+            }
+
+            if (in_array($booking->status, ['canceled', 'cancelled', 'expired'], true)) {
+                // A payment may complete after a customer/admin cancels the booking.
+                // Record the captured funds first so a failed refund remains visible to finance.
+                DB::transaction(function () use ($booking, $paymentIntentId, $expectedCurrency) {
+                    $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                    $payment = array_merge($locked->payment ?? [], [
+                        'stripe_payment_intent' => $paymentIntentId,
+                        'amount' => $this->calculateTotalAmount($locked),
+                        'currency' => strtoupper($expectedCurrency),
+                        'completed_at' => now(),
+                    ]);
+                    $locked->update(['payment_method' => 'stripe', 'payment_status' => 'completed', 'payment' => $payment]);
+                    FinancialTransaction::firstOrCreate(
+                        ['provider_reference' => $paymentIntentId],
+                        [
+                            'booking_id' => $locked->id, 'user_id' => $locked->user_id,
+                            'type' => 'payment', 'status' => 'completed',
+                            'amount_minor' => $this->toStripeAmount($this->calculateTotalAmount($locked), $expectedCurrency),
+                            'currency' => strtoupper($expectedCurrency), 'provider' => 'stripe',
+                            'idempotency_key' => 'stripe-payment-' . $paymentIntentId, 'occurred_at' => now(),
+                        ]
+                    );
+                });
+
+                try {
+                    $refund = \Stripe\Refund::create([
+                        'payment_intent' => $paymentIntentId,
+                        'reason' => 'requested_by_customer',
+                    ], ['idempotency_key' => 'mam-booking-' . $booking->id . '-canceled-auto-refund-v1']);
+                    DB::transaction(function () use ($booking, $refund, $expectedCurrency) {
+                        $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                        $payment = array_merge($locked->payment ?? [], ['refund_id' => $refund->id, 'refunded_at' => now()]);
+                        $locked->update(['payment_status' => 'refunded', 'payment' => $payment]);
+                        FinancialTransaction::firstOrCreate(
+                            ['provider_reference' => $refund->id],
+                            [
+                                'booking_id' => $locked->id, 'user_id' => $locked->user_id,
+                                'type' => 'refund', 'status' => 'completed',
+                                'amount_minor' => $this->toStripeAmount($this->calculateTotalAmount($locked), $expectedCurrency),
+                                'currency' => strtoupper($expectedCurrency), 'provider' => 'stripe',
+                                'idempotency_key' => 'stripe-refund-' . $refund->id, 'occurred_at' => now(),
+                            ]
+                        );
+                    });
+                } catch (ApiErrorException $refundError) {
+                    Log::error('Automatic refund failed for canceled booking', ['booking_id' => $booking->id]);
+                }
+                return false;
+            }
+
+            DB::transaction(function () use ($booking, $paymentIntentId, $paymentIntent, $expectedCurrency) {
+                $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                if ($locked->payment_status === 'completed') {
+                    return;
+                }
+                $locked->update([
                     'payment_method' => 'stripe',
                     'payment_status' => 'completed',
-                    'payment' => array_merge($booking->payment ?? [], [
+                    'payment' => array_merge($locked->payment ?? [], [
                         'stripe_payment_intent' => $paymentIntentId,
-                        'amount' => $paymentIntent->amount / 100,
+                        'amount' => $this->calculateTotalAmount($locked),
+                        'currency' => strtoupper($expectedCurrency),
                         'completed_at' => now(),
                     ]),
                 ]);
-                
-                return true;
-            }
-            
-            return false;
+                FinancialTransaction::firstOrCreate(
+                    ['provider_reference' => $paymentIntentId],
+                    [
+                        'booking_id' => $locked->id,
+                        'user_id' => $locked->user_id,
+                        'type' => 'payment',
+                        'status' => 'completed',
+                        'amount_minor' => $this->toStripeAmount($this->calculateTotalAmount($locked), $expectedCurrency),
+                        'currency' => strtoupper($expectedCurrency),
+                        'provider' => 'stripe',
+                        'idempotency_key' => 'stripe-payment-' . $paymentIntentId,
+                        'occurred_at' => now(),
+                    ]
+                );
+            });
+            return true;
         } catch (ApiErrorException $e) {
             Log::error('Stripe payment confirmation failed', [
                 'payment_intent_id' => $paymentIntentId,
@@ -135,11 +209,19 @@ class PaymentService
     private function calculateTotalAmount(Booking $booking): float
     {
         $pricing = $booking->pricing ?? [];
-        $basePrice = $pricing['basePrice'] ?? 0;
-        $addOnsTotal = $pricing['addOnsTotal'] ?? 0;
-        $tax = $pricing['tax'] ?? 0;
-        
-        return $basePrice + $addOnsTotal + $tax;
+        // Existing quotations use total; legacy keys are supported only as a fallback.
+        return (float) ($pricing['total'] ?? (
+            ($pricing['basePrice'] ?? $pricing['base'] ?? 0)
+            + ($pricing['addOnsTotal'] ?? $pricing['addOnTotal'] ?? 0)
+            + ($pricing['tax'] ?? $pricing['taxes'] ?? 0)
+        ));
+    }
+
+    private function toStripeAmount(float $amount, string $currency): int
+    {
+        // Stripe represents UGX in two-decimal API units for backwards compatibility.
+        // Other zero-decimal currencies must be explicitly added after provider verification.
+        return (int) round($amount * 100);
     }
 
     /**
@@ -152,16 +234,32 @@ class PaymentService
                 $refund = \Stripe\Refund::create([
                     'payment_intent' => $booking->payment['stripe_payment_intent'],
                     'reason' => 'requested_by_customer',
+                ], [
+                    'idempotency_key' => 'mam-booking-' . $booking->id . '-refund-v1',
                 ]);
 
-                $booking->update([
-                    'payment_status' => 'refunded',
-                    'payment' => array_merge($booking->payment ?? [], [
-                        'refund_id' => $refund->id,
-                        'refunded_at' => now(),
-                    ]),
-                ]);
-
+                DB::transaction(function () use ($booking, $refund) {
+                    $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                    $payment = $locked->payment ?? [];
+                    $payment['refund_id'] = $refund->id;
+                    $payment['refunded_at'] = now();
+                    $locked->update(['payment_status' => 'refunded', 'payment' => $payment]);
+                    $currency = strtoupper((string) ($locked->pricing['currency'] ?? config('rental.currency', 'UGX')));
+                    FinancialTransaction::firstOrCreate(
+                        ['provider_reference' => $refund->id],
+                        [
+                            'booking_id' => $locked->id,
+                            'user_id' => $locked->user_id,
+                            'type' => 'refund',
+                            'status' => 'completed',
+                            'amount_minor' => $this->toStripeAmount($this->calculateTotalAmount($locked), strtolower($currency)),
+                            'currency' => $currency,
+                            'provider' => 'stripe',
+                            'idempotency_key' => 'stripe-refund-' . $refund->id,
+                            'occurred_at' => now(),
+                        ]
+                    );
+                });
                 return ['success' => true, 'refund_id' => $refund->id];
             } catch (ApiErrorException $e) {
                 Log::error('Stripe refund failed', [
@@ -169,7 +267,7 @@ class PaymentService
                     'error' => $e->getMessage(),
                 ]);
                 
-                return ['success' => false, 'error' => $e->getMessage()];
+                return ['success' => false, 'error' => 'Refund provider request failed. Please review the payment dashboard.'];
             }
         }
 
