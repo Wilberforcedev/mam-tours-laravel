@@ -298,8 +298,34 @@ class OperationsController extends Controller
                     }
                     return $existing;
                 }
+                $lockedBooking = \\App\\Models\\Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+                if ($data['type'] === 'refund') {
+                    if ($lockedBooking->status !== 'canceled') {
+                        throw \\Illuminate\\Validation\\ValidationException::withMessages(['type' => ['Cancel the booking before recording a refund.']]);
+                    }
+                    $paidForRefund = (int) FinancialTransaction::where('booking_id', $lockedBooking->id)->where('status', 'completed')->where('type', 'payment')->sum('amount_minor');
+                    $alreadyRefunded = (int) FinancialTransaction::where('booking_id', $lockedBooking->id)->where('status', 'completed')->where('type', 'refund')->sum('amount_minor');
+                    if ((int) $data['amount_minor'] > max(0, $paidForRefund - $alreadyRefunded)) {
+                        throw \\Illuminate\\Validation\\ValidationException::withMessages(['amount_minor' => ['Refund amount exceeds the unreimbursed amount received.']]);
+                    }
+                }
+                if ($data['type'] === 'deposit_received') {
+                    $depositCap = (int) round(((float) ($lockedBooking->pricing['deposit'] ?? 0)) * 100);
+                    $alreadyReceived = (int) FinancialTransaction::where('booking_id', $lockedBooking->id)->where('status', 'completed')->where('type', 'deposit_received')->sum('amount_minor');
+                    if ($alreadyReceived + (int) $data['amount_minor'] > $depositCap) {
+                        throw \\Illuminate\\Validation\\ValidationException::withMessages(['amount_minor' => ['Deposit received exceeds the quoted refundable deposit.']]);
+                    }
+                }
+                if ($data['type'] === 'deposit_returned') {
+                    $received = (int) FinancialTransaction::where('booking_id', $lockedBooking->id)->where('status', 'completed')->where('type', 'deposit_received')->sum('amount_minor');
+                    $returned = (int) FinancialTransaction::where('booking_id', $lockedBooking->id)->where('status', 'completed')->where('type', 'deposit_returned')->sum('amount_minor');
+                    if ((int) $data['amount_minor'] > max(0, $received - $returned)) {
+                        throw \\Illuminate\\Validation\\ValidationException::withMessages(['amount_minor' => ['Deposit return exceeds the refundable deposit balance.']]);
+                    }
+                }
+
                 $transaction = FinancialTransaction::create([
-                    'booking_id' => $booking->id,
+                    'booking_id' => $lockedBooking->id,
                     'user_id' => $request->user()->id,
                     'type' => $data['type'],
                     'direction' => $data['direction'] ?? null,
