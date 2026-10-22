@@ -181,9 +181,9 @@ class OperationsController extends Controller
                 $currency = strtoupper((string) ($booking->pricing['currency'] ?? config('rental.currency', 'UGX')));
                 $quoted = (int) round(((float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0)) * 100);
                 $paid = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
-                    ->whereIn('type', ['payment', 'deposit_received'])->sum('amount_minor');
+                    ->where('type', 'payment')->sum('amount_minor');
                 $refunded = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
-                    ->whereIn('type', ['refund', 'deposit_returned'])->sum('amount_minor');
+                    ->where('type', 'refund')->sum('amount_minor');
                 return ['booking_id' => $booking->id, 'currency' => $currency, 'outstanding_minor_units' => max(0, $quoted - $paid + $refunded)];
             })->filter(fn ($item) => $item['outstanding_minor_units'] > 0)->values();
 
@@ -226,7 +226,15 @@ class OperationsController extends Controller
         try {
             $transaction = DB::transaction(function () use ($data, $request, $booking, $currency) {
                 $existing = FinancialTransaction::where('idempotency_key', $data['idempotency_key'])->first();
-                if ($existing) return $existing;
+                if ($existing) {
+                    if ((int) $existing->booking_id !== (int) $booking->id
+                        || (int) $existing->amount_minor !== (int) $data['amount_minor']
+                        || strtoupper($existing->currency) !== $currency
+                        || $existing->type !== $data['type']) {
+                        throw new \\RuntimeException('Idempotency key was already used for a different transaction.');
+                    }
+                    return $existing;
+                }
                 $transaction = FinancialTransaction::create([
                     'booking_id' => $booking->id,
                     'user_id' => $request->user()->id,
@@ -243,9 +251,9 @@ class OperationsController extends Controller
                 if ($data['type'] === 'payment') {
                     $quotedMinor = (int) round(((float) ($booking->pricing['total'] ?? $booking->totalPrice ?? 0)) * 100);
                     $paidMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
-                        ->whereIn('type', ['payment', 'deposit_received'])->sum('amount_minor');
+                        ->where('type', 'payment')->sum('amount_minor');
                     $refundedMinor = (int) FinancialTransaction::where('booking_id', $booking->id)->where('status', 'completed')
-                        ->whereIn('type', ['refund', 'deposit_returned'])->sum('amount_minor');
+                        ->where('type', 'refund')->sum('amount_minor');
                     $status = ($paidMinor - $refundedMinor) >= $quotedMinor ? 'completed' : 'partially_paid';
                     $booking->update([
                         'payment_method' => $data['provider'],
