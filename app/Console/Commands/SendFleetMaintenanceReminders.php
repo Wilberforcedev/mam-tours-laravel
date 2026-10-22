@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Models\Notification;
 use App\Models\User;
 use App\Models\VehicleMaintenanceRecord;
-use App\Services\NotificationService;
 use Illuminate\Console\Command;
 
 class SendFleetMaintenanceReminders extends Command
