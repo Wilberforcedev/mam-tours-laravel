@@ -112,6 +112,9 @@ Route::get('/health', function () {
 // Images
 Route::get('/images', [CarController::class, 'getImages']);
 
+// Date-based availability and a customer-facing quotation.
+Route::get('/availability', [\App\Http\Controllers\AvailabilityController::class, 'check']);
+
 // Public Cars API (read-only)
 Route::get('/cars', [CarController::class, 'index']);
 Route::get('/cars/{id}', [CarController::class, 'show']);
@@ -131,13 +134,35 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/bookings/reserve', [BookingController::class, 'reserve'])->middleware('throttle:10,1');
     Route::post('/bookings/{id}/confirm', [BookingController::class, 'confirm']);
     Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
-
-    // Admin-only booking operations
-    Route::middleware('admin')->group(function () {
+    
+    // Fleet staff manage physical vehicle handover and return.
+    Route::middleware('role:fleet')->group(function () {
         Route::post('/bookings/{id}/check-out', [BookingController::class, 'checkout']);
         Route::put('/bookings/{id}/return', [BookingController::class, 'returnVehicle']);
     });
 });
+
+Route::middleware(['auth:sanctum', 'admin'])->get('/admin/bookings/{id}/identity-document', [BookingController::class, 'downloadIdentityDocument']);
+
+// Staff operations: least-privilege access by role.
+Route::middleware(['auth:sanctum', 'role:fleet'])->prefix('operations')->group(function () {
+    Route::get('/maintenance', [\App\Http\Controllers\OperationsController::class, 'maintenanceIndex']);
+    Route::post('/maintenance', [\App\Http\Controllers\OperationsController::class, 'maintenanceStore']);
+    Route::put('/maintenance/{id}', [\App\Http\Controllers\OperationsController::class, 'maintenanceUpdate']);
+});
+
+Route::middleware(['auth:sanctum', 'role:finance'])->prefix('operations')->group(function () {
+    Route::get('/reports/financial-summary', [\App\Http\Controllers\OperationsController::class, 'financialSummary']);
+    Route::get('/reports/bookings', [\App\Http\Controllers\OperationsController::class, 'bookingsReport']);
+    Route::get('/reports/management-summary', [\App\Http\Controllers\OperationsController::class, 'managementSummary']);
+    Route::post('/bookings/{id}/refund', [\App\Http\Controllers\OperationsController::class, 'refundBooking']);
+    Route::get('/transactions', [\App\Http\Controllers\OperationsController::class, 'transactionsIndex']);
+    Route::get('/transactions/{id}/receipt', [\App\Http\Controllers\OperationsController::class, 'transactionReceipt']);
+    Route::post('/transactions', [\App\Http\Controllers\OperationsController::class, 'recordFinancialTransaction']);
+});
+
+Route::middleware(['auth:sanctum', 'admin'])->put('/admin/users/{id}/role', [\App\Http\Controllers\OperationsController::class, 'updateStaffRole']);
+
 
 // Protected Reports (admin only)
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
@@ -193,16 +218,21 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 // API v1 Routes
 Route::prefix('v1')->middleware('api.version:v1')->group(function () {
     Route::get('/cars', [\App\Http\Controllers\Api\V1\CarApiController::class, 'index']);
-    Route::get('/cars/{id}', [\App\Http\Controllers\Api\V1\CarApiController::class, 'show']);
     Route::get('/cars/search', [\App\Http\Controllers\Api\V1\CarApiController::class, 'search']);
+    Route::get('/cars/{id}', [\App\Http\Controllers\Api\V1\CarApiController::class, 'show']);
 });
 
 // API v2 Routes (Enhanced with more features)
 Route::prefix('v2')->middleware('api.version:v2')->group(function () {
     Route::get('/cars', [\App\Http\Controllers\Api\V2\CarApiController::class, 'index']);
-    Route::get('/cars/{id}', [\App\Http\Controllers\Api\V2\CarApiController::class, 'show']);
     Route::get('/cars/search', [\App\Http\Controllers\Api\V2\CarApiController::class, 'search']);
+    Route::get('/cars/{id}', [\App\Http\Controllers\Api\V2\CarApiController::class, 'show']);
 });
+
+// Stripe's provider-signed webhook is public but validates Stripe-Signature.
+Route::post('/webhooks/stripe', [\App\Http\Controllers\PaymentController::class, 'stripeWebhook']);
+// IntaSend callbacks validate the dashboard-configured challenge value.
+Route::post('/webhooks/intasend', [\App\Http\Controllers\PaymentController::class, 'intaSendWebhook']);
 
 // Webhook Routes
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
@@ -214,6 +244,9 @@ Route::post('/webhooks/receive', [\App\Http\Controllers\WebhookController::class
 
 // API Documentation
 Route::get('/docs/spec', [\App\Http\Controllers\ApiDocController::class, 'spec']);
+
+// Public test-upload endpoint removed; uploads must use authenticated workflows.
+
 
 // KYC API v2 Routes
 Route::prefix('v2')->middleware('api.version:v2')->group(function () {

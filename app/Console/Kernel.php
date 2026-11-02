@@ -29,6 +29,9 @@ class Kernel extends ConsoleKernel
             ->onFailure(function () {
                 \Log::error('Scheduled database backup failed');
             });
+        
+        // Notify fleet/admin staff of service and vehicle-document deadlines daily.
+        $schedule->command('fleet:send-maintenance-reminders')->dailyAt('07:00')->withoutOverlapping();
     }
 
     /**

@@ -11,6 +11,8 @@ class KycVerification extends Model
 
     protected $table = 'kyc_verifications';
 
+    protected $hidden = ['id_number', 'permit_number', 'id_document_path', 'permit_document_path', 'id_original_document_path', 'permit_original_document_path'];
+
     protected $fillable = [
         'user_id',
         'id_type',

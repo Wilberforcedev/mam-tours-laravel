@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\Booking;
-use App\Models\Car;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -11,7 +10,7 @@ class ExpireBookingHolds extends Command
 {
     protected $signature = 'bookings:expire-holds';
 
-    protected $description = 'Expire stale booking holds and release their vehicles';
+    protected $description = 'Expire stale booking holds';
 
     public function handle(): int
     {
@@ -48,14 +47,6 @@ class ExpireBookingHolds extends Command
             }
 
             $booking->update(['status' => 'expired']);
-
-            if ($booking->car_id) {
-                $stillBooked = Booking::active()->where('car_id', $booking->car_id)->exists();
-
-                if (!$stillBooked) {
-                    Car::whereKey($booking->car_id)->update(['isAvailable' => true]);
-                }
-            }
 
             return true;
         });

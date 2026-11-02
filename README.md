@@ -7,17 +7,18 @@ Hey there! Welcome to MAM Tours, a car rental platform built to make booking veh
 This isn't just another booking system. Here's what makes it tick:
 
 - **Easy Sign-Up & Login**: Get customers registered and verified with ID upload (just like Jumia does it)
-- **Smart Booking**: Real-time availability, instant pricing, and a booking flow that actually works
-- **Flexible Payments**: Stripe card processing is supported; mobile money initiation is currently simulated and needs a real provider integration before production use
+- **Smart Booking**: Date/time overlap checks, expiring holds, configurable rental limits, and transparent quotations
+- **Fleet Operations**: Maintenance blocks, service/accident history, and pickup/return mileage and fuel records
+- **Flexible Payments**: Configurable Stripe card payments and IntaSend mobile-money push for Ugandan MTN/Airtel; both remain disabled until provider credentials and staging tests are complete
 - **Admin Control**: Manage everything from one dashboard - bookings, cars, customers, verifications, reviews
-- **Stay Connected**: Automatic email and SMS notifications keep everyone in the loop
+- **Stay Connected**: Notification hooks and scheduled in-app fleet reminders; verify production email/SMS delivery separately
 - **Customer Reviews**: Let your customers share their experience
 - **Professional Invoices**: Generate clean PDF invoices automatically
 
 ## What You'll Need
 
 Before diving in, make sure you have:
-- PHP 7.3+ (the engine that runs everything)
+- PHP 8.0+ (Composer requires PHP ^8.0)
 - MySQL 5.7+ (where all your data lives)
 - Composer (PHP's package manager)
 - Node.js & NPM (for the frontend stuff)
@@ -93,6 +94,13 @@ DB_PASSWORD=${{MYSQL_PASSWORD}}
 # Your payment keys
 STRIPE_KEY=your_actual_stripe_key
 STRIPE_SECRET=your_actual_stripe_secret
+STRIPE_ENABLED=false
+STRIPE_CURRENCY=UGX
+INTASEND_ENABLED=false
+INTASEND_SECRET_KEY=
+INTASEND_WEBHOOK_CHALLENGE=
+INTASEND_BASE_URL=https://api.intasend.com
+RENTAL_CURRENCY=UGX
 ```
 
 **4. Get Your URL**
@@ -105,14 +113,20 @@ Need more details? Check out `RAILWAY_DEPLOYMENT.md` for the full walkthrough.
 
 **Payments**
 
-Stripe can process card payments when valid Stripe keys and webhook settings are configured. Mobile money initiation is currently simulated; do not treat it as a live MTN or Airtel integration.
+Stripe card payments are implemented but disabled unless `STRIPE_ENABLED=true`, `STRIPE_CURRENCY`, API keys and the signed webhook secret are configured. Verify that your Stripe account supports the selected currency before enabling live payments.
 
-The mobile money callback endpoint is `POST /webhooks/mobile-money`. It accepts callbacks only when `WEBHOOK_SECRET` is configured, and requires `X-Webhook-Signature` to be the lowercase hexadecimal HMAC-SHA256 of the exact raw request body. Configure the same long random secret on the trusted callback sender. Callbacks without a valid signature are rejected, and repeated successful callbacks do not send duplicate payment notifications.
+Ugandan MTN/Airtel mobile-money push is implemented through IntaSend and remains disabled unless `INTASEND_ENABLED=true`, `INTASEND_SECRET_KEY`, and `INTASEND_WEBHOOK_CHALLENGE` are configured. Set the same long random challenge in the IntaSend dashboard and your hosting secrets. Configure these callback URLs in the provider dashboards:
+- Stripe: `POST /api/webhooks/stripe` using `STRIPE_WEBHOOK_SECRET`
+- IntaSend: `POST /api/webhooks/intasend` using the configured challenge
+
+Only provider-confirmed, amount-matched and currency-matched payments are recorded as completed. Do not treat provider initiation as payment confirmation. Stripe refunds are provider-processed; mobile-money/cash refunds must be transferred through the approved workflow and recorded by finance.
+
+Before production, run migrations in staging, back up the database and storage, test provider callbacks and receipts, and confirm that KYC files are stored on the private disk. Do not expose the private disk through a public storage symlink.
 
 You'll want to get your payment providers sorted:
-- **Stripe**: Grab your API keys from https://stripe.com (handles card payments)
-- **Mobile Money**: Set up MTN and Airtel Money credentials
-- Pop everything into your `.env` file
+- **Stripe**: API keys and signed webhook secret from your Stripe dashboard
+- **IntaSend**: live account activation for Uganda mobile-money push, secret key, and webhook challenge
+- Pop the credentials into hosting secrets, not source control
 
 **Emails & SMS**
 
@@ -169,7 +183,7 @@ tests/                    # Automated tests
 
 ## Testing
 
-Want to make sure everything works? Run the tests:
+Run the tests and PHP lint before deploying. The current automated suite is not a substitute for staging tests of booking concurrency, private documents, and real provider callbacks:
 
 ```bash
 php artisan test                        # Run everything

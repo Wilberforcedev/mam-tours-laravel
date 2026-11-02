@@ -22,19 +22,29 @@ class PaymentServiceTest extends TestCase
             'id' => 'pi_test_123',
             'status' => 'succeeded',
             'currency' => 'ugx',
-            'amount_received' => 320000,
+            'amount_received' => 32000000,
             'metadata' => ['booking_id' => null],
         ], $overrides);
     }
 
     /** @test */
-    public function zero_decimal_currencies_are_not_multiplied()
+    public function ugx_is_sent_as_a_two_decimal_api_currency()
     {
         $service = $this->service();
 
-        $this->assertSame(100000, $service->toMinorUnits(100000.0, 'ugx'));
-        $this->assertSame(320000, $service->toMinorUnits(320000.0, 'UGX'));
-        $this->assertSame(1050, $service->toMinorUnits(1049.6, 'ugx'));
+        // Stripe requires UGX with trailing "00" decimals: UGX 5 is amount 500.
+        $this->assertSame(10000000, $service->toMinorUnits(100000.0, 'ugx'));
+        $this->assertSame(32000000, $service->toMinorUnits(320000.0, 'UGX'));
+        $this->assertSame(104960, $service->toMinorUnits(1049.6, 'ugx'));
+    }
+
+    /** @test */
+    public function true_zero_decimal_currencies_are_not_multiplied()
+    {
+        $service = $this->service();
+
+        $this->assertSame(500, $service->toMinorUnits(500.0, 'jpy'));
+        $this->assertSame(320000, $service->toMinorUnits(320000.0, 'rwf'));
     }
 
     /** @test */
@@ -52,7 +62,7 @@ class PaymentServiceTest extends TestCase
         config(['services.stripe.currency' => 'ugx']);
 
         $this->assertSame('ugx', $this->service()->currency());
-        $this->assertSame(50000, $this->service()->toMinorUnits(50000.0));
+        $this->assertSame(5000000, $this->service()->toMinorUnits(50000.0));
     }
 
     /** @test */
@@ -60,7 +70,7 @@ class PaymentServiceTest extends TestCase
     {
         $service = $this->service();
 
-        $this->assertSame(320000.0, $service->fromMinorUnits(320000, 'ugx'));
+        $this->assertSame(320000.0, $service->fromMinorUnits(32000000, 'ugx'));
         $this->assertSame(100.5, $service->fromMinorUnits(10050, 'usd'));
     }
 

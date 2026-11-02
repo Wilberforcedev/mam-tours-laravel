@@ -121,8 +121,6 @@ class MaryMusokeBookingTest extends TestCase
                 'status',
                 'totalPrice',
                 'idType',
-                'idNumber',
-                'idDocument',
             ],
             'redirect_url',
         ]);
@@ -146,8 +144,8 @@ class MaryMusokeBookingTest extends TestCase
         echo "  ║ Daily Rate:        UGX 100,000\n";
         echo "  ║ Total Price:       UGX " . number_format($bookingResponse['totalPrice']) . "\n";
         echo "  ║ ID Type:           {$bookingResponse['idType']}\n";
-        echo "  ║ NIN:               {$bookingResponse['idNumber']}\n";
-        echo "  ║ Document:          {$bookingResponse['idDocument']}\n";
+        echo "  ║ NIN:               {$bookingData['idNumber']}\n";
+        echo "  ║ Document:          stored privately\n";
         echo "  ║ Status:            {$bookingResponse['status']}\n";
         echo "  ║ Redirect:          {$response->json('redirect_url')}\n";
         echo "  ╚════════════════════════════════════════════╝\n";
@@ -173,9 +171,9 @@ class MaryMusokeBookingTest extends TestCase
         echo "  - File Path: {$booking->idDocument}\n";
         echo "  - File Size: " . number_format($booking->idDocument ? strlen($booking->idDocument) : 0) . " bytes\n";
 
-        // Step 10: Verify car unavailable
-        $this->assertFalse($car->fresh()->isAvailable);
-        echo "\n✓ Step 10: Car marked as unavailable\n";
+        // Step 10: Verify the vehicle stays operational; dates are enforced by overlap checks.
+        $this->assertTrue($car->fresh()->isAvailable);
+        echo "\n✓ Step 10: Car remains operational for non-overlapping dates\n";
 
         // Final summary
         echo "\n";
@@ -186,7 +184,7 @@ class MaryMusokeBookingTest extends TestCase
         echo "║ ✓ File uploaded from gallery                              ║\n";
         echo "║ ✓ Customer details stored correctly                       ║\n";
         echo "║ ✓ NIN verified and stored                                 ║\n";
-        echo "║ ✓ Car marked unavailable                                  ║\n";
+        echo "║ ✓ Dates held against overlapping bookings                 ║\n";
         echo "║ ✓ All validations passed                                  ║\n";
         echo "╚════════════════════════════════════════════════════════════╝\n\n";
     }

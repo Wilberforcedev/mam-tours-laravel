@@ -69,8 +69,6 @@ class BookingFileUploadTest extends TestCase
                 'status',
                 'totalPrice',
                 'idType',
-                'idNumber',
-                'idDocument',
             ],
             'redirect_url',
         ]);
@@ -88,7 +86,12 @@ class BookingFileUploadTest extends TestCase
         $this->assertNotNull($booking->idDocument);
         Storage::disk('private')->assertExists($booking->idDocument);
 
-        $this->assertFalse($car->fresh()->isAvailable);
+        // Identity data is never serialized back to the client.
+        $response->assertJsonMissing(['idNumber' => '12345678']);
+        $response->assertJsonMissing(['idDocument' => $booking->idDocument]);
+
+        // isAvailable tracks operational status; dates are governed by overlap checks.
+        $this->assertTrue($car->fresh()->isAvailable);
     }
 
     public function test_booking_succeeds_without_id_document()

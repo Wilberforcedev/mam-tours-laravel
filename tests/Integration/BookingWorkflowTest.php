@@ -26,9 +26,10 @@ class BookingWorkflowTest extends TestCase
         $response->assertStatus(201);
         $bookingId = $response->json('booking.id');
 
+        // The car stays operational; overlapping dates are rejected separately.
         $this->assertDatabaseHas('cars', [
             'id' => $car->id,
-            'isAvailable' => false,
+            'isAvailable' => true,
         ]);
 
         $this->assertDatabaseHas('bookings', [
@@ -151,9 +152,9 @@ class BookingWorkflowTest extends TestCase
     }
 
     /** @test */
-    public function expire_holds_command_frees_the_car()
+    public function expire_holds_command_marks_stale_holds_expired()
     {
-        $car = Car::factory()->create(['isAvailable' => false]);
+        $car = Car::factory()->create(['isAvailable' => true]);
 
         $booking = Booking::factory()->reserved()->create([
             'car_id' => $car->id,

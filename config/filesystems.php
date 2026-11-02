@@ -42,6 +42,7 @@ return [
             'visibility' => 'public',
         ],
 
+        // Sensitive KYC files must never be exposed through the public storage symlink.
         'private' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),

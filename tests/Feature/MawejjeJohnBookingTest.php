@@ -72,10 +72,10 @@ class MawejjeJohnBookingTest extends TestCase
             'payment_method' => 'cash',
         ]);
 
-        // Verify car is marked as unavailable
+        // The vehicle stays operational; the booked dates are locked by overlap checks.
         $this->assertDatabaseHas('cars', [
             'id' => $toyotaNoah->id,
-            'isAvailable' => false,
+            'isAvailable' => true,
         ]);
 
         // Verify booking details
