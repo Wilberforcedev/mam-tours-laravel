@@ -21,8 +21,12 @@ class CarApiController extends Controller
      */
     public function index(Request $request)
     {
-        $perPage = $request->input('per_page', 15);
-        $category = $request->input('category');
+        $validated = $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'category' => 'nullable|string|max:50',
+        ]);
+        $perPage = (int) ($validated['per_page'] ?? 15);
+        $category = $validated['category'] ?? null;
         
         $cacheKey = "api.v1.cars.index.{$perPage}.{$category}";
         

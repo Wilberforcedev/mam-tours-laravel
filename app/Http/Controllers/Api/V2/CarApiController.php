@@ -24,10 +24,16 @@ class CarApiController extends Controller
      */
     public function index(Request $request)
     {
-        $perPage = $request->input('per_page', 15);
-        $category = $request->input('category');
-        $sortBy = $request->input('sort_by', 'created_at');
-        $sortOrder = $request->input('sort_order', 'desc');
+        $validated = $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'category' => 'nullable|string|max:50',
+            'sort_by' => 'sometimes|in:created_at,brand,model,dailyRate,seats',
+            'sort_order' => 'sometimes|in:asc,desc',
+        ]);
+        $perPage = (int) ($validated['per_page'] ?? 15);
+        $category = $validated['category'] ?? null;
+        $sortBy = $validated['sort_by'] ?? 'created_at';
+        $sortOrder = $validated['sort_order'] ?? 'desc';
         
         $cacheKey = "api.v2.cars.index.{$perPage}.{$category}.{$sortBy}.{$sortOrder}";
         

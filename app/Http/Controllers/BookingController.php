@@ -278,7 +278,7 @@ class BookingController extends Controller
                 $pricing = $this->computePrice($car, $pickupDate, $returnDate, $validated['addOns'] ?? []);
 
                 return Booking::create([
-                    'car_id' => $validated['carId'],
+                    'car_id' => $validated['carId'] ?? $validated['car_id'],
                     'user_id' => auth()->id(),
                     'customerName' => $validated['customerName'],
                     'startDate' => $pickupAt,
