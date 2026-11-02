@@ -8,6 +8,9 @@ use App\Models\AuditLog;
 use App\Services\NotificationService;
 use App\Services\AnalyticsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 
 class BookingController extends Controller
@@ -33,7 +36,6 @@ class BookingController extends Controller
         $base = $car->dailyRate * $days;
 
         $start = new Carbon($startISO);
-        $end = new Carbon($endISO);
         $weekendDays = 0;
 
         for ($i = 0; $i < $days; $i++) {
@@ -73,9 +75,49 @@ class BookingController extends Controller
         ];
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Booking::all());
+        $user = $request->user();
+
+        $query = Booking::with('car')->latest();
+        if (!$user->isAdmin()) {
+            $query->where('user_id', $user->id);
+        }
+
+        return response()->json($query->get());
+    }
+
+    private function carUnavailableResponse()
+    {
+        return response()->json(['message' => 'Car is not available for the selected dates'], 409);
+    }
+
+    /**
+     * Locks the car row so concurrent requests serialize, then rejects any overlapping active booking.
+     */
+    private function lockAvailableCar(int $carId, Carbon $start, Carbon $end): ?Car
+    {
+        $car = Car::whereKey($carId)->lockForUpdate()->first();
+
+        if (!$car || !$car->isAvailable) {
+            return null;
+        }
+
+        $conflict = Booking::active()->overlapping($car->id, $start, $end)->exists();
+
+        return $conflict ? null : $car;
+    }
+
+    private function releaseCarIfIdle(Car $car, int $exceptBookingId): void
+    {
+        $stillBooked = Booking::active()
+            ->where('car_id', $car->id)
+            ->whereKeyNot($exceptBookingId)
+            ->exists();
+
+        if (!$stillBooked) {
+            $car->update(['isAvailable' => true]);
+        }
     }
 
     public function store(Request $request)
@@ -86,7 +128,7 @@ class BookingController extends Controller
                 'customerName' => 'required|string|max:200',
                 'customerEmail' => 'required|email|max:200',
                 'customerPhone' => 'required|string|max:20',
-                'startDate' => 'required|date_format:Y-m-d',
+                'startDate' => 'required|date_format:Y-m-d|after_or_equal:today',
                 'endDate' => 'required|date_format:Y-m-d|after:startDate',
                 'paymentMethod' => 'required|in:stripe,mtn_mobile_money,airtel_money,bank_transfer,cash',
                 'mobileMoneyNumber' => 'nullable|string|max:20',
@@ -95,106 +137,86 @@ class BookingController extends Controller
                 'idDocument' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
             ]);
 
-            // Check if user is trying to use cashless payment without ID verification
-            $user = auth()->user();
+            $user = $request->user();
             $isCashlessPayment = in_array($validated['paymentMethod'], ['stripe', 'bank_transfer']);
-            
-            if ($isCashlessPayment && $user && !$user->id_document) {
+
+            if ($isCashlessPayment && !$user->id_document) {
                 return response()->json([
                     'message' => 'ID verification required for cashless payments',
                     'errors' => ['paymentMethod' => ['Please upload your ID/passport in your profile to use cashless payments.']]
                 ], 422);
             }
 
-            $car = Car::find($validated['carId']);
-            if (!$car->isAvailable) {
-                return response()->json(['message' => 'Car is not available'], 400);
-            }
+            $idDocumentPath = $request->hasFile('idDocument')
+                ? $request->file('idDocument')->store('bookings/id-documents', 'private')
+                : null;
 
-            $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], []);
+            $start = Carbon::parse($validated['startDate']);
+            $end = Carbon::parse($validated['endDate']);
 
-            // Handle file upload
-            $idDocumentPath = null;
-            try {
-                if ($request->hasFile('idDocument')) {
-                    $file = $request->file('idDocument');
-                    \Log::info('File upload attempt', [
-                        'name' => $file->getClientOriginalName(),
-                        'size' => $file->getSize(),
-                        'mime' => $file->getMimeType(),
-                        'path' => $file->getRealPath()
-                    ]);
-                    
-                    // Ensure directory exists
-                    $storagePath = storage_path('app/public/bookings/id-documents');
-                    if (!is_dir($storagePath)) {
-                        mkdir($storagePath, 0755, true);
-                        \Log::info('Created storage directory: ' . $storagePath);
-                    }
-                    
-                    // Try to store in public disk
-                    $idDocumentPath = $file->store('bookings/id-documents', 'public');
-                    \Log::info('File uploaded successfully: ' . $idDocumentPath);
-                } else {
-                    \Log::warning('No file in request');
+            $booking = DB::transaction(function () use ($validated, $user, $idDocumentPath, $start, $end) {
+                $car = $this->lockAvailableCar((int) $validated['carId'], $start, $end);
+                if (!$car) {
+                    return null;
                 }
-            } catch (\Exception $fileError) {
-                \Log::error('File upload error: ' . $fileError->getMessage() . ' | ' . $fileError->getFile() . ':' . $fileError->getLine());
-                // Continue without file if upload fails - don't throw
-                $idDocumentPath = null;
-            }
 
-            $bookingData = [
-                'car_id' => $validated['carId'],
-                'customerName' => $validated['customerName'],
-                'customerEmail' => $validated['customerEmail'],
-                'customerPhone' => $validated['customerPhone'],
-                'startDate' => $validated['startDate'],
-                'endDate' => $validated['endDate'],
-                'status' => 'pending',
-                'totalPrice' => $pricing['total'],
-                'pricing' => json_encode($pricing),
-                'payment_method' => $validated['paymentMethod'],
-                'payment_status' => 'pending',
-                'mobile_money_number' => $validated['mobileMoneyNumber'] ?? null,
-                'idType' => $validated['idType'] ?? null,
-                'idNumber' => $validated['idNumber'] ?? null,
-                'idDocument' => $idDocumentPath,
-            ];
+                $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], []);
 
-            // Add user_id if user is authenticated
-            if ($user) {
-                $bookingData['user_id'] = $user->id;
-            }
-
-            $booking = Booking::create($bookingData);
-
-            // Track booking creation
-            $this->analyticsService->trackBookingCreated($booking->id, [
-                'car_id' => $booking->car_id,
-                'paymentMethod' => $booking->paymentMethod,
-                'total_amount' => $pricing['total'],
-                'days' => $pricing['days'],
-            ]);
-
-            // Store audit log
-            AuditLog::create([
-                'action' => 'booking.create',
-                'details' => [
-                    'bookingId' => $booking->id,
-                    'carId' => $booking->car_id,
+                $booking = Booking::create([
+                    'car_id' => $car->id,
+                    'user_id' => $user->id,
+                    'customerName' => $validated['customerName'],
+                    'customerEmail' => $validated['customerEmail'],
+                    'customerPhone' => $validated['customerPhone'],
+                    'startDate' => $start,
+                    'endDate' => $end,
+                    'status' => 'pending',
+                    'totalPrice' => $pricing['total'],
+                    'pricing' => $pricing,
+                    'payment_method' => $validated['paymentMethod'],
+                    'payment_status' => 'pending',
+                    'mobile_money_number' => $validated['mobileMoneyNumber'] ?? null,
                     'idType' => $validated['idType'] ?? null,
                     'idNumber' => $validated['idNumber'] ?? null,
                     'idDocument' => $idDocumentPath,
-                ],
-                'at' => now(),
-            ]);
+                ]);
 
-            // Mark car as unavailable
-            $car->update(['isAvailable' => false]);
+                $car->update(['isAvailable' => false]);
 
-            // Send admin notification about new booking
-            $this->notificationService->sendAdminBookingNotification($booking);
+                AuditLog::create([
+                    'action' => 'booking.create',
+                    'details' => [
+                        'bookingId' => $booking->id,
+                        'carId' => $booking->car_id,
+                        'idType' => $validated['idType'] ?? null,
+                        'idDocument' => $idDocumentPath,
+                    ],
+                    'at' => now(),
+                ]);
+
+                return $booking;
+            });
+
+            if (!$booking) {
+                if ($idDocumentPath) {
+                    Storage::disk('private')->delete($idDocumentPath);
+                }
+                return $this->carUnavailableResponse();
+            }
+
+            // Side effects must not turn a persisted booking into a 500.
+            try {
+                $this->analyticsService->trackBookingCreated($booking->id, [
+                    'car_id' => $booking->car_id,
+                    'paymentMethod' => $booking->payment_method,
+                    'total_amount' => $booking->pricing['total'],
+                    'days' => $booking->pricing['days'],
+                ]);
+
+                $this->notificationService->sendAdminBookingNotification($booking);
+            } catch (\Throwable $e) {
+                report($e);
+            }
 
             return response()->json([
                 'message' => 'Booking submitted successfully! Admin will confirm shortly.',
@@ -202,20 +224,21 @@ class BookingController extends Controller
                 'redirect_url' => route('dashboard')
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::error('Validation error: ' . json_encode($e->errors()));
             return response()->json(['message' => 'Validation failed', 'errors' => $e->errors()], 422);
-        } catch (\Exception $e) {
-            \Log::error('Booking creation error: ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
-            return response()->json(['message' => 'Failed to submit booking', 'error' => $e->getMessage()], 500);
+        } catch (\Throwable $e) {
+            Log::error('Booking creation error', ['exception' => $e]);
+            return response()->json(['message' => 'Failed to submit booking. Please try again.'], 500);
         }
     }
 
     public function show($id)
     {
-        $booking = Booking::find($id);
+        $booking = Booking::with('car')->find($id);
         if (!$booking) {
-            return response()->json(['error' => 'Booking not found'], 404);
+            return response()->json(['message' => 'Booking not found'], 404);
         }
+        $this->authorize('view', $booking);
+
         return response()->json($booking);
     }
 
@@ -224,36 +247,50 @@ class BookingController extends Controller
         $validated = $request->validate([
             'carId' => 'required|exists:cars,id',
             'customerName' => 'required|string|max:200',
-            'startDate' => 'required|date',
+            'startDate' => 'required|date|after_or_equal:today',
             'endDate' => 'required|date|after:startDate',
             'addOns' => 'nullable|array',
+            'addOns.driver' => 'nullable|boolean',
+            'addOns.childSeat' => 'nullable|boolean',
         ]);
 
-        $car = Car::find($validated['carId']);
-        if (!$car->isAvailable) {
-            return response()->json(['error' => 'Car unavailable'], 400);
+        $user = $request->user();
+        $start = Carbon::parse($validated['startDate']);
+        $end = Carbon::parse($validated['endDate']);
+
+        $booking = DB::transaction(function () use ($validated, $user, $start, $end) {
+            $car = $this->lockAvailableCar((int) $validated['carId'], $start, $end);
+            if (!$car) {
+                return null;
+            }
+
+            $addOns = $validated['addOns'] ?? [];
+            $booking = Booking::create([
+                'car_id' => $car->id,
+                'user_id' => $user->id,
+                'customerName' => $validated['customerName'],
+                'startDate' => $start,
+                'endDate' => $end,
+                'status' => 'reserved',
+                'pricing' => $this->computePrice($car, $validated['startDate'], $validated['endDate'], $addOns),
+                'addOns' => $addOns,
+                'expiresAt' => now()->addMinutes(30),
+            ]);
+
+            $car->update(['isAvailable' => false]);
+
+            AuditLog::create([
+                'action' => 'booking.reserve',
+                'details' => ['bookingId' => $booking->id, 'carId' => $booking->car_id],
+                'at' => now(),
+            ]);
+
+            return $booking;
+        });
+
+        if (!$booking) {
+            return $this->carUnavailableResponse();
         }
-
-        $pricing = $this->computePrice($car, $validated['startDate'], $validated['endDate'], $validated['addOns'] ?? []);
-
-        $booking = Booking::create([
-            'car_id' => $validated['carId'],
-            'customerName' => $validated['customerName'],
-            'startDate' => $validated['startDate'],
-            'endDate' => $validated['endDate'],
-            'status' => 'reserved',
-            'pricing' => $pricing,
-            'addOns' => $validated['addOns'] ?? [],
-            'expiresAt' => now()->addMinutes(30),
-        ]);
-
-        $car->update(['isAvailable' => false]);
-
-        AuditLog::create([
-            'action' => 'booking.reserve',
-            'details' => ['bookingId' => $booking->id, 'carId' => $booking->car_id],
-            'at' => now(),
-        ]);
 
         return response()->json(['message' => 'Booking reserved', 'booking' => $booking], 201);
     }
@@ -262,10 +299,15 @@ class BookingController extends Controller
     {
         $booking = Booking::find($id);
         if (!$booking) {
-            return response()->json(['error' => 'Booking not found'], 404);
+            return response()->json(['message' => 'Booking not found'], 404);
         }
-        if (!in_array($booking->status, ['pending', 'reserved'])) {
-            return response()->json(['error' => 'Booking must be pending or reserved to confirm'], 400);
+        $this->authorize('confirm', $booking);
+
+        if (!in_array($booking->status, Booking::HOLD_STATUSES, true)) {
+            return response()->json(['message' => 'Booking must be pending or reserved to confirm'], 400);
+        }
+        if ($booking->isExpiredHold()) {
+            return response()->json(['message' => 'Booking has expired'], 400);
         }
 
         $booking->update([
@@ -273,7 +315,6 @@ class BookingController extends Controller
             'confirmedAt' => now(),
         ]);
 
-        // Send confirmation notification via email and SMS
         \App\Jobs\SendBookingConfirmationNotification::dispatch($booking, 'confirmed');
 
         AuditLog::create([
@@ -289,10 +330,10 @@ class BookingController extends Controller
     {
         $booking = Booking::find($id);
         if (!$booking) {
-            return response()->json(['error' => 'Booking not found'], 404);
+            return response()->json(['message' => 'Booking not found'], 404);
         }
         if ($booking->status !== 'confirmed') {
-            return response()->json(['error' => 'Booking must be confirmed'], 400);
+            return response()->json(['message' => 'Booking must be confirmed'], 400);
         }
 
         $booking->update([
@@ -313,23 +354,27 @@ class BookingController extends Controller
     {
         $booking = Booking::find($id);
         if (!$booking) {
-            return response()->json(['error' => 'Booking not found'], 404);
+            return response()->json(['message' => 'Booking not found'], 404);
         }
-        if (in_array($booking->status, ['completed', 'returned', 'canceled', 'expired'])) {
-            return response()->json(['error' => 'Cannot cancel'], 400);
+        $this->authorize('cancel', $booking);
+
+        if (!in_array($booking->status, ['pending', 'reserved', 'confirmed'], true)) {
+            return response()->json(['message' => 'Cannot cancel'], 400);
         }
 
-        $booking->update([
-            'status' => 'canceled',
-            'canceledAt' => now(),
-        ]);
+        DB::transaction(function () use ($booking) {
+            $booking->update([
+                'status' => 'canceled',
+                'canceledAt' => now(),
+            ]);
 
-        $booking->car->update(['isAvailable' => true]);
+            if ($booking->car) {
+                $this->releaseCarIfIdle($booking->car, $booking->id);
+            }
+        });
 
-        // Send cancellation notification if user exists
         if ($booking->user_id) {
-            $user = $booking->user;
-            $this->notificationService->sendBookingCancellation($booking, $user);
+            $this->notificationService->sendBookingCancellation($booking, $booking->user);
         }
 
         AuditLog::create([
@@ -345,23 +390,25 @@ class BookingController extends Controller
     {
         $booking = Booking::find($id);
         if (!$booking) {
-            return response()->json(['error' => 'Booking not found'], 404);
+            return response()->json(['message' => 'Booking not found'], 404);
         }
-        if (!in_array($booking->status, ['in_use', 'confirmed'])) {
-            return response()->json(['error' => 'Booking not in use'], 400);
+        if (!in_array($booking->status, ['in_use', 'confirmed'], true)) {
+            return response()->json(['message' => 'Booking not in use'], 400);
         }
 
-        $booking->update([
-            'status' => 'completed',
-            'returnedAt' => now(),
-        ]);
+        DB::transaction(function () use ($booking) {
+            $booking->update([
+                'status' => 'completed',
+                'returnedAt' => now(),
+            ]);
 
-        $booking->car->update(['isAvailable' => true]);
+            if ($booking->car) {
+                $this->releaseCarIfIdle($booking->car, $booking->id);
+            }
+        });
 
-        // Send completion notification if user exists
         if ($booking->user_id) {
-            $user = $booking->user;
-            $this->notificationService->sendBookingCompletion($booking, $user);
+            $this->notificationService->sendBookingCompletion($booking, $booking->user);
         }
 
         AuditLog::create([

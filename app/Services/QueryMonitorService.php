@@ -26,25 +26,21 @@ class QueryMonitorService
      */
     private function logSlowQuery($query): void
     {
+        $request = app()->runningInConsole() ? null : request();
+
         Log::warning('Slow query detected', [
             'sql' => $query->sql,
             'bindings' => $query->bindings,
             'time' => $query->time . 'ms',
             'connection' => $query->connectionName,
-            'request_id' => request()->id() ?? 'cli',
+            'request_id' => $request?->header('X-Request-Id') ?? 'cli',
             'user_id' => auth()->id(),
-            'url' => request()->fullUrl() ?? 'N/A',
+            'url' => $request?->fullUrl() ?? 'N/A',
         ]);
 
         // Also send to Sentry if available
         if (app()->bound('sentry')) {
-            \Sentry\captureMessage('Slow Query: ' . $query->sql, [
-                'level' => \Sentry\Severity::warning(),
-                'extra' => [
-                    'query_time' => $query->time,
-                    'bindings' => $query->bindings,
-                ],
-            ]);
+            \Sentry\captureMessage('Slow Query: ' . $query->sql, \Sentry\Severity::warning());
         }
     }
 

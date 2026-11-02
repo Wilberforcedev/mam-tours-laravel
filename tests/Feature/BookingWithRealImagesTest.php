@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Models\Car;
 use App\Models\Booking;
+use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -13,7 +14,9 @@ class BookingWithRealImagesTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Storage::fake('private');
         Storage::fake('public');
+        $this->actingAs(User::factory()->customer()->create());
     }
 
     public function test_booking_with_real_image_from_gallery()
@@ -56,8 +59,8 @@ class BookingWithRealImagesTest extends TestCase
             'customerName' => 'Test User',
             'customerEmail' => 'test@example.com',
             'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
+            'startDate' => now()->addDays(2)->toDateString(),
+            'endDate' => now()->addDays(7)->toDateString(),
             'paymentMethod' => 'mtn_mobile_money',
             'mobileMoneyNumber' => '+256700000000',
             'idType' => 'nin',
@@ -131,6 +134,7 @@ class BookingWithRealImagesTest extends TestCase
         // Assert file was uploaded
         $booking = Booking::where('customerEmail', 'test@example.com')->first();
         $this->assertNotNull($booking->idDocument);
+        Storage::disk('private')->assertExists($booking->idDocument);
         echo "✓ File path stored: {$booking->idDocument}\n";
 
         // Assert car is now unavailable
@@ -146,63 +150,43 @@ class BookingWithRealImagesTest extends TestCase
 
     public function test_booking_with_different_image_formats()
     {
-        echo "\n\n=== TESTING DIFFERENT IMAGE FORMATS ===\n";
-        
-        $car = Car::factory()->create(['isAvailable' => true, 'dailyRate' => 100000]);
-        
-        // Test with JPG
-        $jpgPath = public_path('images/Hilux.jpg');
-        if (file_exists($jpgPath)) {
-            echo "✓ Testing with JPG: Hilux.jpg\n";
-            $file = new UploadedFile($jpgPath, 'id.jpg', 'image/jpeg', null, true);
-            
+        $formats = [
+            ['path' => public_path('images/Hilux.jpg'), 'name' => 'id.jpg', 'idType' => 'nin', 'idNumber' => '11111111'],
+            ['path' => public_path('images/Alphard.jpeg'), 'name' => 'id.jpeg', 'idType' => 'passport', 'idNumber' => '22222222'],
+        ];
+
+        $asserted = 0;
+
+        foreach ($formats as $format) {
+            if (!file_exists($format['path'])) {
+                continue;
+            }
+
+            $car = Car::factory()->create(['isAvailable' => true, 'dailyRate' => 100000]);
+            $file = new UploadedFile($format['path'], $format['name'], 'image/jpeg', null, true);
+
             $response = $this->post('/api/bookings', [
                 'carId' => $car->id,
-                'customerName' => 'JPG Test',
-                'customerEmail' => 'jpg@test.com',
+                'customerName' => 'Format Test',
+                'customerEmail' => 'format@test.com',
                 'customerPhone' => '+256700000001',
-                'startDate' => '2026-02-20',
-                'endDate' => '2026-02-25',
+                'startDate' => now()->addDays(2)->toDateString(),
+                'endDate' => now()->addDays(7)->toDateString(),
                 'paymentMethod' => 'cash',
-                'idType' => 'nin',
-                'idNumber' => '11111111',
+                'idType' => $format['idType'],
+                'idNumber' => $format['idNumber'],
                 'idDocument' => $file,
             ]);
-            
-            if ($response->status() === 201) {
-                echo "  ✓ JPG upload successful\n";
-            } else {
-                echo "  ✗ JPG upload failed: {$response->status()}\n";
-            }
+
+            $response->assertStatus(201);
+            $asserted++;
         }
-        
-        // Test with JPEG
-        $jpegPath = public_path('images/Alphard.jpeg');
-        if (file_exists($jpegPath)) {
-            echo "✓ Testing with JPEG: Alphard.jpeg\n";
-            $file = new UploadedFile($jpegPath, 'id.jpeg', 'image/jpeg', null, true);
-            
-            $response = $this->post('/api/bookings', [
-                'carId' => $car->id,
-                'customerName' => 'JPEG Test',
-                'customerEmail' => 'jpeg@test.com',
-                'customerPhone' => '+256700000002',
-                'startDate' => '2026-02-20',
-                'endDate' => '2026-02-25',
-                'paymentMethod' => 'cash',
-                'idType' => 'passport',
-                'idNumber' => '22222222',
-                'idDocument' => $file,
-            ]);
-            
-            if ($response->status() === 201) {
-                echo "  ✓ JPEG upload successful\n";
-            } else {
-                echo "  ✗ JPEG upload failed: {$response->status()}\n";
-            }
+
+        if ($asserted === 0) {
+            $this->markTestSkipped('No sample images available');
         }
-        
-        echo "\n=== FORMAT TEST COMPLETE ===\n\n";
+
+        $this->assertSame(count($formats), $asserted);
     }
 
     public function test_complete_booking_workflow()
@@ -234,8 +218,8 @@ class BookingWithRealImagesTest extends TestCase
             'customerName' => 'John Doe',
             'customerEmail' => 'john@example.com',
             'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
+            'startDate' => now()->addDays(2)->toDateString(),
+            'endDate' => now()->addDays(7)->toDateString(),
             'paymentMethod' => 'airtel_money',
             'mobileMoneyNumber' => '+256700000000',
             'idType' => 'passport',

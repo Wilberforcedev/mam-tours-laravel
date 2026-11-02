@@ -61,12 +61,12 @@ Route::get('/api/docs', [\App\Http\Controllers\ApiDocController::class, 'ui']);
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
-Route::post('/register', [AuthController::class, 'register'])->name('register.post');
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1')->name('register.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // Password reset routes
 Route::get('/forgot-password', [PasswordResetController::class, 'showForgotForm'])->name('password.request');
-Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])->name('password.email');
+Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])->middleware('throttle:5,1')->name('password.email');
 Route::get('/reset-password/{token}', [PasswordResetController::class, 'showResetForm'])->name('password.reset');
 Route::post('/reset-password', [PasswordResetController::class, 'reset'])->name('password.update');
 
@@ -113,7 +113,10 @@ Route::middleware('auth')->group(function () {
             $availableCars = \App\Models\Car::where('isAvailable', true)->count();
             return view('dashboard', compact('totalCars', 'activeBookings', 'completedBookings', 'availableCars'));
         } else {
-            $userBookings = \App\Models\Booking::where('customerName', $user->name)->get();
+            $userBookings = \App\Models\Booking::where('user_id', $user->id)
+                ->with('car')
+                ->latest()
+                ->get();
             return view('dashboard', compact('userBookings'));
         }
     })->name('dashboard');

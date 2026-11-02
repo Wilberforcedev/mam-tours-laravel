@@ -44,7 +44,7 @@ class CarManagementTest extends TestCase
         $response = $this->postJson('/api/cars', [
             'brand' => 'Toyota',
             'model' => 'Camry',
-            'numberPlate' => 'ABC123',
+            'numberPlate' => 'UAJ 979B',
             'dailyRate' => 150000,
             'seats' => 5,
         ], $this->getApiHeaders($customer));
@@ -55,7 +55,7 @@ class CarManagementTest extends TestCase
         $response = $this->postJson('/api/cars', [
             'brand' => 'Toyota',
             'model' => 'Camry',
-            'numberPlate' => 'ABC123',
+            'numberPlate' => 'UAJ 979B',
             'dailyRate' => 150000,
             'seats' => 5,
         ], $this->getApiHeaders($admin));
@@ -64,7 +64,7 @@ class CarManagementTest extends TestCase
         $this->assertDatabaseHas('cars', [
             'brand' => 'Toyota',
             'model' => 'Camry',
-            'numberPlate' => 'ABC123',
+            'numberPlate' => 'UAJ 979B',
         ]);
     }
 
@@ -121,7 +121,7 @@ class CarManagementTest extends TestCase
         $response = $this->postJson('/api/cars', [
             'brand' => '', // Invalid: empty
             'model' => 'Camry',
-            'numberPlate' => 'ABC123',
+            'numberPlate' => 'UAJ 979B',
             'dailyRate' => -100, // Invalid: negative
             'seats' => 0, // Invalid: zero
         ], $this->getApiHeaders($admin));
@@ -133,13 +133,13 @@ class CarManagementTest extends TestCase
     /** @test */
     public function number_plate_must_be_unique()
     {
-        $existingCar = Car::factory()->create(['numberPlate' => 'ABC123']);
+        $existingCar = Car::factory()->create(['numberPlate' => 'UAJ 979B']);
         $admin = User::factory()->admin()->create();
 
         $response = $this->postJson('/api/cars', [
             'brand' => 'Toyota',
             'model' => 'Camry',
-            'numberPlate' => 'ABC123', // Duplicate
+            'numberPlate' => 'UAJ 979B', // Duplicate
             'dailyRate' => 150000,
             'seats' => 5,
         ], $this->getApiHeaders($admin));

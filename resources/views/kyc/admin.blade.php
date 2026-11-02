@@ -804,8 +804,8 @@
             }
 
             // Load document previews
-            loadDocumentPreview('id', kyc.id_document_path);
-            loadDocumentPreview('permit', kyc.permit_document_path);
+            loadDocumentPreview('id', kyc.id_document_path, kyc.id);
+            loadDocumentPreview('permit', kyc.permit_document_path, kyc.id);
 
             // Load original document previews if they exist
             const hasOriginalDocs = kyc.id_original_document_path || kyc.permit_original_document_path;
@@ -813,8 +813,8 @@
             
             if (hasOriginalDocs) {
                 originalDocsSection.style.display = 'block';
-                loadDocumentPreview('id_original', kyc.id_original_document_path);
-                loadDocumentPreview('permit_original', kyc.permit_original_document_path);
+                loadDocumentPreview('id_original', kyc.id_original_document_path, kyc.id);
+                loadDocumentPreview('permit_original', kyc.permit_original_document_path, kyc.id);
                 
                 // Show download buttons if documents exist
                 if (kyc.id_original_document_path) {
@@ -831,7 +831,7 @@
             modal.classList.add('active');
         }
 
-        function loadDocumentPreview(type, filePath) {
+        function loadDocumentPreview(type, filePath, kycId) {
             let previewDiv;
             
             if (type === 'id') {
@@ -844,12 +844,20 @@
                 previewDiv = document.getElementById('permitOriginalDocumentPreview');
             }
             
+            if (!previewDiv) return;
+
             if (!filePath) {
                 previewDiv.innerHTML = '<div class="preview-loading">No document uploaded</div>';
                 return;
             }
 
-            const fileUrl = `/storage/${filePath}`;
+            if (!kycId) {
+                previewDiv.innerHTML = '<div class="preview-loading">Document unavailable</div>';
+                return;
+            }
+
+            // Identity documents live on private storage; serve them through the authorised route.
+            const fileUrl = `${API_BASE}/kyc/${kycId}/document/${type}`;
             const fileExtension = filePath.split('.').pop().toLowerCase();
 
             // Check if it's an image or PDF

@@ -31,7 +31,7 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertAuthenticatedAs($user);
-        $response->assertRedirect('/bookings');
+        $response->assertRedirect('/dashboard');
     }
 
     /** @test */

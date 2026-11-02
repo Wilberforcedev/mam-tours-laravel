@@ -5,47 +5,56 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Models\Car;
 use App\Models\Booking;
+use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 class BookingFileUploadTest extends TestCase
 {
+    protected User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        Storage::fake('private');
         Storage::fake('public');
+
+        $this->user = User::factory()->customer()->create();
+    }
+
+    private function bookingData(Car $car, array $overrides = []): array
+    {
+        return array_merge([
+            'carId' => $car->id,
+            'customerName' => $this->user->name,
+            'customerEmail' => $this->user->email,
+            'customerPhone' => '+256700000000',
+            'startDate' => now()->addDays(2)->toDateString(),
+            'endDate' => now()->addDays(7)->toDateString(),
+            'paymentMethod' => 'mtn_mobile_money',
+            'mobileMoneyNumber' => '+256700000000',
+            'idType' => 'nin',
+            'idNumber' => '12345678',
+        ], $overrides);
+    }
+
+    private function idFile(string $name = 'id.jpg'): UploadedFile
+    {
+        return UploadedFile::fake()->create($name, 100, 'image/jpeg');
     }
 
     public function test_can_create_booking_with_file_upload()
     {
-        // Create a test car
         $car = Car::factory()->create([
             'isAvailable' => true,
             'dailyRate' => 100000,
         ]);
 
-        // Create a fake file
-        $file = UploadedFile::fake()->image('id.jpg', 640, 480);
+        $response = $this->actingAs($this->user)->post('/api/bookings', $this->bookingData($car, [
+            'idDocument' => $this->idFile(),
+        ]));
 
-        // Prepare booking data
-        $bookingData = [
-            'carId' => $car->id,
-            'customerName' => 'John Doe',
-            'customerEmail' => 'john@example.com',
-            'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
-            'paymentMethod' => 'mtn_mobile_money',
-            'mobileMoneyNumber' => '+256700000000',
-            'idType' => 'nin',
-            'idNumber' => '12345678',
-            'idDocument' => $file,
-        ];
-
-        // Submit booking
-        $response = $this->post('/api/bookings', $bookingData);
-
-        // Assert response
         $response->assertStatus(201);
         $response->assertJsonStructure([
             'message',
@@ -66,162 +75,95 @@ class BookingFileUploadTest extends TestCase
             'redirect_url',
         ]);
 
-        // Assert booking was created
         $this->assertDatabaseHas('bookings', [
             'car_id' => $car->id,
-            'customerName' => 'John Doe',
-            'customerEmail' => 'john@example.com',
-            'customerPhone' => '+256700000000',
+            'customerName' => $this->user->name,
             'status' => 'pending',
             'idType' => 'nin',
             'idNumber' => '12345678',
+            'user_id' => $this->user->id,
         ]);
 
-        // Assert file was uploaded
-        $booking = Booking::where('customerEmail', 'john@example.com')->first();
+        $booking = Booking::where('user_id', $this->user->id)->first();
         $this->assertNotNull($booking->idDocument);
-        Storage::disk('public')->assertExists($booking->idDocument);
+        Storage::disk('private')->assertExists($booking->idDocument);
 
-        // Assert car is now unavailable
         $this->assertFalse($car->fresh()->isAvailable);
-
-        echo "\n✓ Booking created successfully with ID: " . $booking->id;
-        echo "\n✓ File uploaded to: " . $booking->idDocument;
-        echo "\n✓ Car marked as unavailable";
-        echo "\n✓ Total price: " . $booking->totalPrice;
     }
 
-    public function test_booking_validation_fails_without_file()
+    public function test_booking_succeeds_without_id_document()
     {
         $car = Car::factory()->create(['isAvailable' => true]);
 
-        $bookingData = [
-            'carId' => $car->id,
-            'customerName' => 'John Doe',
-            'customerEmail' => 'john@example.com',
-            'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
-            'paymentMethod' => 'mtn_mobile_money',
-            'idType' => 'nin',
-            'idNumber' => '12345678',
-            // Missing idDocument
-        ];
+        $response = $this->actingAs($this->user)->post('/api/bookings', $this->bookingData($car));
 
-        $response = $this->post('/api/bookings', $bookingData);
+        $response->assertStatus(201);
 
-        $response->assertStatus(422);
-        $response->assertJsonStructure([
-            'message',
-            'errors' => ['idDocument'],
-        ]);
-
-        echo "\n✓ Validation correctly rejects booking without file";
+        $booking = Booking::where('user_id', $this->user->id)->first();
+        $this->assertNull($booking->idDocument);
     }
 
     public function test_booking_validation_fails_with_invalid_file_type()
     {
         $car = Car::factory()->create(['isAvailable' => true]);
 
-        // Create a fake text file (invalid)
-        $file = UploadedFile::fake()->create('document.txt', 100);
-
-        $bookingData = [
-            'carId' => $car->id,
-            'customerName' => 'John Doe',
-            'customerEmail' => 'john@example.com',
-            'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
-            'paymentMethod' => 'mtn_mobile_money',
-            'idType' => 'nin',
-            'idNumber' => '12345678',
-            'idDocument' => $file,
-        ];
-
-        $response = $this->post('/api/bookings', $bookingData);
+        $response = $this->actingAs($this->user)->post('/api/bookings', $this->bookingData($car, [
+            'idDocument' => UploadedFile::fake()->create('document.txt', 100, 'text/plain'),
+        ]));
 
         $response->assertStatus(422);
-
-        echo "\n✓ Validation correctly rejects invalid file type";
+        $response->assertJsonValidationErrors('idDocument');
     }
 
     public function test_booking_validation_fails_with_oversized_file()
     {
         $car = Car::factory()->create(['isAvailable' => true]);
 
-        // Create a fake file larger than 5MB
-        $file = UploadedFile::fake()->image('id.jpg')->size(6000); // 6MB
-
-        $bookingData = [
-            'carId' => $car->id,
-            'customerName' => 'John Doe',
-            'customerEmail' => 'john@example.com',
-            'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
-            'paymentMethod' => 'mtn_mobile_money',
-            'idType' => 'nin',
-            'idNumber' => '12345678',
-            'idDocument' => $file,
-        ];
-
-        $response = $this->post('/api/bookings', $bookingData);
+        $response = $this->actingAs($this->user)->post('/api/bookings', $this->bookingData($car, [
+            'idDocument' => UploadedFile::fake()->create('id.jpg', 6000, 'image/jpeg'),
+        ]));
 
         $response->assertStatus(422);
-
-        echo "\n✓ Validation correctly rejects oversized file";
+        $response->assertJsonValidationErrors('idDocument');
     }
 
     public function test_booking_validation_fails_with_invalid_dates()
     {
         $car = Car::factory()->create(['isAvailable' => true]);
-        $file = UploadedFile::fake()->image('id.jpg');
 
-        $bookingData = [
-            'carId' => $car->id,
-            'customerName' => 'John Doe',
-            'customerEmail' => 'john@example.com',
-            'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-25',
-            'endDate' => '2026-02-20', // End date before start date
-            'paymentMethod' => 'mtn_mobile_money',
-            'idType' => 'nin',
-            'idNumber' => '12345678',
-            'idDocument' => $file,
-        ];
-
-        $response = $this->post('/api/bookings', $bookingData);
+        $response = $this->actingAs($this->user)->post('/api/bookings', $this->bookingData($car, [
+            'startDate' => now()->addDays(5)->toDateString(),
+            'endDate' => now()->addDays(2)->toDateString(),
+            'idDocument' => $this->idFile(),
+        ]));
 
         $response->assertStatus(422);
+        $response->assertJsonValidationErrors('endDate');
+    }
 
-        echo "\n✓ Validation correctly rejects invalid dates";
+    public function test_booking_validation_rejects_past_dates()
+    {
+        $car = Car::factory()->create(['isAvailable' => true]);
+
+        $response = $this->actingAs($this->user)->post('/api/bookings', $this->bookingData($car, [
+            'startDate' => now()->subDay()->toDateString(),
+            'endDate' => now()->addDays(2)->toDateString(),
+        ]));
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('startDate');
     }
 
     public function test_booking_fails_if_car_unavailable()
     {
         $car = Car::factory()->create(['isAvailable' => false]);
-        $file = UploadedFile::fake()->image('id.jpg');
 
-        $bookingData = [
-            'carId' => $car->id,
-            'customerName' => 'John Doe',
-            'customerEmail' => 'john@example.com',
-            'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
-            'paymentMethod' => 'mtn_mobile_money',
-            'idType' => 'nin',
-            'idNumber' => '12345678',
-            'idDocument' => $file,
-        ];
+        $response = $this->actingAs($this->user)->post('/api/bookings', $this->bookingData($car, [
+            'idDocument' => $this->idFile(),
+        ]));
 
-        $response = $this->post('/api/bookings', $bookingData);
-
-        $response->assertStatus(400);
-        $response->assertJsonStructure(['message']);
-
-        echo "\n✓ Booking correctly rejected for unavailable car";
+        $response->assertStatus(409);
+        $response->assertJson(['message' => 'Car is not available for the selected dates']);
     }
 
     public function test_booking_with_passport_instead_of_nin()
@@ -231,32 +173,29 @@ class BookingFileUploadTest extends TestCase
             'dailyRate' => 100000,
         ]);
 
-        $file = UploadedFile::fake()->image('passport.jpg');
-
-        $bookingData = [
-            'carId' => $car->id,
-            'customerName' => 'Jane Doe',
-            'customerEmail' => 'jane@example.com',
-            'customerPhone' => '+256700000001',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
+        $response = $this->actingAs($this->user)->post('/api/bookings', $this->bookingData($car, [
             'paymentMethod' => 'airtel_money',
-            'mobileMoneyNumber' => '+256700000001',
             'idType' => 'passport',
             'idNumber' => 'AB123456',
-            'idDocument' => $file,
-        ];
-
-        $response = $this->post('/api/bookings', $bookingData);
+            'idDocument' => $this->idFile('passport.jpg'),
+        ]));
 
         $response->assertStatus(201);
 
         $this->assertDatabaseHas('bookings', [
-            'customerEmail' => 'jane@example.com',
+            'user_id' => $this->user->id,
             'idType' => 'passport',
             'idNumber' => 'AB123456',
         ]);
+    }
 
-        echo "\n✓ Booking created successfully with passport";
+    public function test_guest_cannot_create_booking()
+    {
+        $car = Car::factory()->create(['isAvailable' => true]);
+
+        $response = $this->postJson('/api/bookings', $this->bookingData($car));
+
+        $response->assertStatus(401);
+        $this->assertDatabaseCount('bookings', 0);
     }
 }

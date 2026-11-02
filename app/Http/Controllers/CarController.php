@@ -9,9 +9,19 @@ use Illuminate\Http\Request;
 
 class CarController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Car::all());
+        $query = Car::query();
+
+        if ($request->has('available')) {
+            $query->where('isAvailable', $request->boolean('available'));
+        }
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->query('category'));
+        }
+
+        return response()->json($query->orderBy('id')->get());
     }
 
     public function store(Request $request)

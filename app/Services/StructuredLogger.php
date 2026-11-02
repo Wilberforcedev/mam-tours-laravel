@@ -13,13 +13,16 @@ class StructuredLogger
      */
     public function log(string $level, string $message, array $context = []): void
     {
+        $isHttp = !app()->runningInConsole();
+        $request = $isHttp ? request() : null;
+
         $enrichedContext = array_merge($context, [
-            'request_id' => request()->id() ?? uniqid('cli_'),
+            'request_id' => $request?->header('X-Request-Id') ?? uniqid('cli_'),
             'user_id' => auth()->id(),
             'environment' => app()->environment(),
             'timestamp' => now()->toIso8601String(),
-            'ip_address' => request()->ip() ?? 'N/A',
-            'user_agent' => request()->userAgent() ?? 'N/A',
+            'ip_address' => $request?->ip() ?? 'N/A',
+            'user_agent' => $request?->userAgent() ?? 'N/A',
         ]);
 
         Log::log($level, $message, $enrichedContext);

@@ -33,6 +33,7 @@ return [
     'stripe' => [
         'key' => env('STRIPE_KEY'),
         'secret' => env('STRIPE_SECRET'),
+        'currency' => env('STRIPE_CURRENCY', 'ugx'),
         'webhook' => [
             'secret' => env('STRIPE_WEBHOOK_SECRET'),
         ],

@@ -101,11 +101,11 @@ class BookingFactory extends Factory
     /**
      * Create a cancelled booking.
      */
-    public function cancelled()
+    public function canceled()
     {
         return $this->state(function (array $attributes) {
             return [
-                'status' => 'cancelled',
+                'status' => 'canceled',
                 'canceledAt' => now()->subHours(1),
             ];
         });

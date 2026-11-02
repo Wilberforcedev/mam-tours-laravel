@@ -6,9 +6,14 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
+    private const MAX_LOGIN_ATTEMPTS = 5;
+    private const LOGIN_DECAY_SECONDS = 60;
+
     // Show login form
     public function showLogin()
     {
@@ -26,15 +31,35 @@ class AuthController extends Controller
             'password' => 'required|min:6',
         ]);
 
+        $throttleKey = Str::lower($credentials['email']) . '|' . $request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, self::MAX_LOGIN_ATTEMPTS)) {
+            return back()->withErrors([
+                'email' => 'Too many login attempts. Please try again in ' . RateLimiter::availableIn($throttleKey) . ' seconds.',
+            ])->onlyInput('email');
+        }
+
+        $user = User::where('email', $credentials['email'])->first();
+
+        if ($user && $user->isLocked()) {
+            return back()->withErrors([
+                'email' => 'This account is temporarily locked after too many failed attempts. Please try again later.',
+            ])->onlyInput('email');
+        }
+
         if (Auth::attempt($credentials)) {
+            RateLimiter::clear($throttleKey);
             $request->session()->regenerate();
             $user = Auth::user();
-            
+
             if ($user->isAdmin()) {
                 return redirect('/admin')->with('success', 'Welcome back, Admin!');
             }
             return redirect('/dashboard')->with('success', 'Login successful!');
         }
+
+        RateLimiter::hit($throttleKey, self::LOGIN_DECAY_SECONDS);
+        $user?->incrementFailedAttempts();
 
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',
@@ -58,6 +83,7 @@ class AuthController extends Controller
             'email' => 'required|email|unique:users',
             'password' => 'required|min:6|confirmed',
             'phone' => 'nullable|string|max:20',
+            'terms' => 'accepted',
         ]);
 
         $user = User::create([
@@ -90,7 +116,7 @@ class AuthController extends Controller
     {
         $this->authorize('view', Auth::user());
         $user = Auth::user();
-        $bookings = $user->bookings()->latest()->get();
+        $bookings = $user->bookings()->with('car')->latest()->get();
 
         return view('dashboard', compact('user', 'bookings'));
     }
@@ -99,7 +125,7 @@ class AuthController extends Controller
     public function manageUsers()
     {
         $this->authorize('isAdmin', Auth::user());
-        $users = User::all();
+        $users = User::orderBy('created_at', 'desc')->paginate(50);
 
         return view('admin.users', compact('users'));
     }

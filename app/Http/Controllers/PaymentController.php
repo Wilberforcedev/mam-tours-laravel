@@ -29,13 +29,10 @@ class PaymentController extends Controller
      */
     public function show(Booking $booking)
     {
-        // Ensure user can only pay for their own bookings
-        if ($booking->user_id !== Auth::id()) {
-            abort(403, 'Unauthorized access to booking');
-        }
+        $this->authorize('pay', $booking);
 
         if ($booking->payment_status === 'completed') {
-            return redirect()->route('bookings.show', $booking)
+            return redirect()->route('dashboard')
                 ->with('info', 'This booking has already been paid for.');
         }
 
@@ -58,11 +55,18 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        if ($booking->user_id !== Auth::id()) {
+        if (!$booking->isOwnedBy(Auth::user())) {
             return response()->json([
                 'success' => false,
                 'error' => 'Unauthorized access to booking',
             ], 403);
+        }
+
+        if ($booking->payment_status === 'completed') {
+            return response()->json([
+                'success' => false,
+                'error' => 'This booking has already been paid for.',
+            ], 409);
         }
 
         $result = $this->paymentService->createStripePayment($booking);
@@ -96,7 +100,7 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        if ($booking->user_id !== Auth::id()) {
+        if (!$booking->isOwnedBy(Auth::user())) {
             return response()->json([
                 'success' => false,
                 'error' => 'Unauthorized access to booking',
@@ -115,13 +119,13 @@ class PaymentController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Payment completed successfully!',
-                'redirect_url' => route('bookings.show', $booking),
+                'redirect_url' => route('dashboard'),
             ]);
         }
 
         return response()->json([
             'success' => false,
-            'error' => 'Payment confirmation failed',
+            'error' => 'Payment could not be verified. Please contact support if you were charged.',
         ], 400);
     }
 
@@ -142,7 +146,7 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        if ($booking->user_id !== Auth::id()) {
+        if (!$booking->isOwnedBy(Auth::user())) {
             return response()->json([
                 'success' => false,
                 'error' => 'Unauthorized access to booking',
@@ -233,7 +237,7 @@ class PaymentController extends Controller
      */
     public function generateInvoice(Booking $booking)
     {
-        if ($booking->user_id !== Auth::id() && !Auth::user()->is_admin) {
+        if (!$booking->isOwnedBy(Auth::user()) && !Auth::user()->isAdmin()) {
             abort(403, 'Unauthorized access to invoice');
         }
 

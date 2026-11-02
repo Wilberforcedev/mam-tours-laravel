@@ -39,17 +39,20 @@ class ProfileController extends Controller
             $validated['profile_picture'] = $path;
         }
 
-        // Handle ID document upload
+        // Handle ID document upload. Identity documents are private assets:
+        // they are only served through an authorised controller action.
         if ($request->hasFile('idDocument')) {
-            // Delete old document if exists
-            if ($user->id_document && Storage::disk('public')->exists($user->id_document)) {
+            if ($user->id_document) {
+                Storage::disk('private')->delete($user->id_document);
                 Storage::disk('public')->delete($user->id_document);
             }
 
-            // Store new document
-            $path = $request->file('idDocument')->store('id-documents', 'public');
+            $path = $request->file('idDocument')->store('id-documents', 'private');
             $validated['id_document'] = $path;
         }
+
+        // The upload itself is already stored; never mass-assign the raw file.
+        unset($validated['idDocument']);
 
         // Add ID fields if provided
         if ($request->filled('idType')) {

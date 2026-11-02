@@ -43,8 +43,8 @@ class MawejjeJohnBookingTest extends TestCase
             'customerName' => 'Mawejje John',
             'customerEmail' => 'mawejje.john@example.com',
             'customerPhone' => '+256700123456',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
+            'startDate' => now()->addDays(2)->toDateString(),
+            'endDate' => now()->addDays(7)->toDateString(),
             'paymentMethod' => 'cash',
         ];
 

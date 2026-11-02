@@ -6,26 +6,55 @@ use App\Models\Booking;
 use Stripe\Stripe;
 use Stripe\PaymentIntent;
 use Stripe\Exception\ApiErrorException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class PaymentService
 {
+    // https://stripe.com/docs/currencies#zero-decimal
+    private const ZERO_DECIMAL_CURRENCIES = [
+        'bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg',
+        'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf',
+    ];
+
     public function __construct()
     {
         Stripe::setApiKey(config('services.stripe.secret'));
     }
 
-    /**
-     * Create Stripe payment intent
-     */
+    public function currency(): string
+    {
+        return strtolower(config('services.stripe.currency', 'ugx'));
+    }
+
+    public function toMinorUnits(float $amount, ?string $currency = null): int
+    {
+        $currency = strtolower($currency ?? $this->currency());
+
+        return in_array($currency, self::ZERO_DECIMAL_CURRENCIES, true)
+            ? (int) round($amount)
+            : (int) round($amount * 100);
+    }
+
+    public function fromMinorUnits(int $amount, ?string $currency = null): float
+    {
+        $currency = strtolower($currency ?? $this->currency());
+
+        return in_array($currency, self::ZERO_DECIMAL_CURRENCIES, true) ? (float) $amount : $amount / 100;
+    }
+
     public function createStripePayment(Booking $booking): array
     {
         try {
             $amount = $this->calculateTotalAmount($booking);
-            
+
+            if ($amount <= 0) {
+                return ['success' => false, 'error' => 'Booking has no payable amount'];
+            }
+
             $paymentIntent = PaymentIntent::create([
-                'amount' => $amount * 100, // Stripe expects cents
-                'currency' => 'usd',
+                'amount' => $this->toMinorUnits($amount),
+                'currency' => $this->currency(),
                 'metadata' => [
                     'booking_id' => $booking->id,
                     'user_id' => $booking->user_id,
@@ -45,10 +74,7 @@ class PaymentService
                 'error' => $e->getMessage(),
             ]);
 
-            return [
-                'success' => false,
-                'error' => $e->getMessage(),
-            ];
+            return ['success' => false, 'error' => 'Unable to start card payment. Please try again.'];
         }
     }
 
@@ -95,51 +121,86 @@ class PaymentService
         }
     }
 
-    /**
-     * Confirm Stripe payment
-     */
     public function confirmStripePayment(string $paymentIntentId, Booking $booking): bool
     {
         try {
             $paymentIntent = PaymentIntent::retrieve($paymentIntentId);
-            
-            if ($paymentIntent->status === 'succeeded') {
-                $booking->update([
-                    'payment_method' => 'stripe',
-                    'payment_status' => 'completed',
-                    'payment' => array_merge($booking->payment ?? [], [
-                        'stripe_payment_intent' => $paymentIntentId,
-                        'amount' => $paymentIntent->amount / 100,
-                        'completed_at' => now(),
-                    ]),
-                ]);
-                
-                return true;
-            }
-            
-            return false;
         } catch (ApiErrorException $e) {
             Log::error('Stripe payment confirmation failed', [
                 'payment_intent_id' => $paymentIntentId,
                 'booking_id' => $booking->id,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return false;
         }
+
+        return $this->applyStripeIntent($paymentIntent, $booking);
     }
 
     /**
-     * Calculate total booking amount
+     * Marks the booking paid only if the intent belongs to it, succeeded, and charged the expected amount.
      */
-    private function calculateTotalAmount(Booking $booking): float
+    public function applyStripeIntent(object $paymentIntent, Booking $booking): bool
     {
-        $pricing = $booking->pricing ?? [];
-        $basePrice = $pricing['basePrice'] ?? 0;
-        $addOnsTotal = $pricing['addOnsTotal'] ?? 0;
-        $tax = $pricing['tax'] ?? 0;
-        
-        return $basePrice + $addOnsTotal + $tax;
+        if (!$this->intentMatchesBooking($paymentIntent, $booking)) {
+            Log::warning('Stripe intent rejected for booking', [
+                'payment_intent_id' => $paymentIntent->id ?? null,
+                'booking_id' => $booking->id,
+            ]);
+
+            return false;
+        }
+
+        return DB::transaction(function () use ($paymentIntent, $booking) {
+            $locked = Booking::whereKey($booking->id)->lockForUpdate()->first();
+
+            if (!$locked) {
+                return false;
+            }
+
+            if ($locked->payment_status === 'completed') {
+                return ($locked->payment['stripe_payment_intent'] ?? null) === $paymentIntent->id;
+            }
+
+            $locked->update([
+                'payment_method' => 'stripe',
+                'payment_status' => 'completed',
+                'payment' => array_merge($locked->payment ?? [], [
+                    'stripe_payment_intent' => $paymentIntent->id,
+                    'amount' => $this->fromMinorUnits((int) $paymentIntent->amount_received, $paymentIntent->currency),
+                    'currency' => $paymentIntent->currency,
+                    'completed_at' => now(),
+                ]),
+            ]);
+
+            $booking->setRawAttributes($locked->getAttributes(), true);
+
+            return true;
+        });
+    }
+
+    public function intentMatchesBooking(object $paymentIntent, Booking $booking): bool
+    {
+        $metadataBookingId = $paymentIntent->metadata['booking_id'] ?? null;
+        $currency = strtolower((string) ($paymentIntent->currency ?? ''));
+
+        return ($paymentIntent->status ?? null) === 'succeeded'
+            && $metadataBookingId !== null
+            && (string) $metadataBookingId === (string) $booking->id
+            && $currency === $this->currency()
+            && (int) ($paymentIntent->amount_received ?? 0) === $this->toMinorUnits($this->calculateTotalAmount($booking), $currency);
+    }
+
+    public function calculateTotalAmount(Booking $booking): float
+    {
+        $pricing = $booking->pricing;
+
+        if (is_string($pricing)) {
+            $pricing = json_decode($pricing, true);
+        }
+
+        return (float) (($pricing['total'] ?? null) ?? $booking->totalPrice ?? 0);
     }
 
     /**
@@ -169,7 +230,7 @@ class PaymentService
                     'error' => $e->getMessage(),
                 ]);
                 
-                return ['success' => false, 'error' => $e->getMessage()];
+                return ['success' => false, 'error' => 'Refund could not be processed. Please contact support.'];
             }
         }
 

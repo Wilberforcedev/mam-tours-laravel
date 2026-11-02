@@ -65,7 +65,7 @@ class BookingObserver
             
             if ($booking->status === 'confirmed') {
                 $eventType = 'booking.confirmed';
-            } elseif ($booking->status === 'cancelled') {
+            } elseif (in_array($booking->status, ['canceled', 'cancelled'], true)) {
                 $eventType = 'booking.cancelled';
             }
 

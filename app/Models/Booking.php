@@ -54,6 +54,39 @@ class Booking extends Model
         'canceledAt' => 'datetime',
     ];
 
+    public const ACTIVE_STATUSES = ['pending', 'reserved', 'confirmed', 'in_use'];
+
+    public const HOLD_STATUSES = ['pending', 'reserved'];
+
+    public function scopeActive($query)
+    {
+        return $query->whereIn('status', self::ACTIVE_STATUSES)
+            ->where(function ($q) {
+                $q->whereNotIn('status', self::HOLD_STATUSES)
+                    ->orWhereNull('expiresAt')
+                    ->orWhere('expiresAt', '>', now());
+            });
+    }
+
+    public function scopeOverlapping($query, int $carId, $startDate, $endDate)
+    {
+        return $query->where('car_id', $carId)
+            ->where('startDate', '<', $endDate)
+            ->where('endDate', '>', $startDate);
+    }
+
+    public function isOwnedBy(?User $user): bool
+    {
+        return $user !== null && $this->user_id !== null && (int) $this->user_id === (int) $user->id;
+    }
+
+    public function isExpiredHold(): bool
+    {
+        return in_array($this->status, self::HOLD_STATUSES, true)
+            && $this->expiresAt !== null
+            && $this->expiresAt->isPast();
+    }
+
     public function car()
     {
         return $this->belongsTo(Car::class, 'car_id');

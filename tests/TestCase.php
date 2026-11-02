@@ -4,22 +4,10 @@ namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Artisan;
 
 abstract class TestCase extends BaseTestCase
 {
     use CreatesApplication, RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        
-        // Run migrations for testing
-        Artisan::call('migrate');
-        
-        // Seed essential data
-        $this->seed();
-    }
 
     /**
      * Create a test user
@@ -93,6 +81,10 @@ abstract class TestCase extends BaseTestCase
      */
     protected function getApiHeaders($user = null)
     {
+        // The test client reuses one container across requests, and the resolved
+        // Sanctum guard caches its user; reset it so each token is honoured.
+        $this->app['auth']->forgetGuards();
+
         if ($user) {
             $token = $user->createApiToken();
             return [

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Models\Car;
 use App\Models\Booking;
+use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -13,7 +14,9 @@ class MaryMusokeBookingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Storage::fake('private');
         Storage::fake('public');
+        $this->actingAs(User::factory()->customer()->create());
     }
 
     public function test_mary_musoke_booking_with_real_image()
@@ -68,8 +71,8 @@ class MaryMusokeBookingTest extends TestCase
             'customerName' => 'Mary Musoke',
             'customerEmail' => 'mary.musoke@example.com',
             'customerPhone' => '+256700000000',
-            'startDate' => '2026-02-20',
-            'endDate' => '2026-02-25',
+            'startDate' => now()->addDays(2)->toDateString(),
+            'endDate' => now()->addDays(7)->toDateString(),
             'paymentMethod' => 'mtn_mobile_money',
             'mobileMoneyNumber' => '+256700000000',
             'idType' => 'nin',
@@ -164,6 +167,7 @@ class MaryMusokeBookingTest extends TestCase
         // Step 9: Verify file upload
         $booking = Booking::where('customerEmail', 'mary.musoke@example.com')->first();
         $this->assertNotNull($booking->idDocument);
+        Storage::disk('private')->assertExists($booking->idDocument);
         
         echo "\n✓ Step 9: File upload verified\n";
         echo "  - File Path: {$booking->idDocument}\n";

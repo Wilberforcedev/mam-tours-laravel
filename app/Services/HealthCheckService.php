@@ -15,9 +15,15 @@ class HealthCheckService
     public function checkDatabase(): array
     {
         try {
-            DB::connection()->getPdo();
-            $version = DB::select('SELECT VERSION() as version')[0]->version ?? 'unknown';
-            
+            $connection = DB::connection();
+            $connection->getPdo();
+
+            $version = match ($connection->getDriverName()) {
+                'sqlite' => DB::select('select sqlite_version() as version')[0]->version ?? 'unknown',
+                'pgsql' => DB::select('select version() as version')[0]->version ?? 'unknown',
+                default => DB::select('select version() as version')[0]->version ?? 'unknown',
+            };
+
             return [
                 'status' => 'ok',
                 'message' => 'Database connected',

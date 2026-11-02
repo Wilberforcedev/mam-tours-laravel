@@ -105,6 +105,7 @@ class ApiAuthenticationTest extends TestCase
         $response->assertJson(['message' => 'Logged out successfully']);
 
         // Token should be revoked
+        $this->app['auth']->forgetGuards();
         $response = $this->getJson('/api/user', [
             'Authorization' => 'Bearer ' . $token,
         ]);

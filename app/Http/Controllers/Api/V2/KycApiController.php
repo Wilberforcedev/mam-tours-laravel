@@ -87,12 +87,14 @@ class KycApiController extends Controller
                 ],
             ], 201);
         } catch (\Exception $e) {
+            report($e);
+
             return response()->json([
                 'version' => 'v2',
                 'error' => [
                     'code' => 'KYC_SUBMISSION_FAILED',
                     'message' => 'Failed to submit KYC documents',
-                    'details' => $e->getMessage(),
+                    'details' => 'Unexpected error. Please try again or contact support.',
                 ],
             ], 500);
         }
@@ -199,12 +201,14 @@ class KycApiController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
+            report($e);
+
             return response()->json([
                 'version' => 'v2',
                 'error' => [
                     'code' => 'KYC_VERIFICATION_FAILED',
                     'message' => 'Failed to verify KYC',
-                    'details' => $e->getMessage(),
+                    'details' => 'Unexpected error. Please try again or contact support.',
                 ],
             ], 500);
         }
@@ -234,12 +238,14 @@ class KycApiController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
+            report($e);
+
             return response()->json([
                 'version' => 'v2',
                 'error' => [
                     'code' => 'KYC_REJECTION_FAILED',
                     'message' => 'Failed to reject KYC',
-                    'details' => $e->getMessage(),
+                    'details' => 'Unexpected error. Please try again or contact support.',
                 ],
             ], 500);
         }
@@ -268,12 +274,14 @@ class KycApiController extends Controller
                 ],
             ]);
         } catch (\Exception $e) {
+            report($e);
+
             return response()->json([
                 'version' => 'v2',
                 'error' => [
                     'code' => 'REQUEST_FAILED',
                     'message' => 'Failed to request additional information',
-                    'details' => $e->getMessage(),
+                    'details' => 'Unexpected error. Please try again or contact support.',
                 ],
             ], 500);
         }

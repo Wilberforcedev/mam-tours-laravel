@@ -136,44 +136,6 @@ function setupEventListeners() {
     });
 }
 
-// Tab Switching
-function switchTab(tabName) {
-    activeTab = tabName;
-    currentPage = 1; // Reset to first page when switching tabs
-    
-    tabs.forEach(t => {
-        if (t.dataset.tab === tabName) {
-            t.classList.add('active');
-        } else {
-            t.classList.remove('active');
-        }
-    });
-
-    if (tabName === 'bookings') {
-        bookingsContainer.style.display = 'block';
-        vehiclesContainer.style.display = 'none';
-        document.getElementById('kycContainer').style.display = 'none';
-        paginationContainer.style.display = 'flex';
-        renderBookings();
-    } else if (tabName === 'vehicles') {
-        bookingsContainer.style.display = 'none';
-        vehiclesContainer.style.display = 'block';
-        document.getElementById('kycContainer').style.display = 'none';
-        paginationContainer.style.display = 'none';
-        currentVehiclePage = 1; // Reset to first page
-        renderVehicles();
-    } else if (tabName === 'kyc') {
-        bookingsContainer.style.display = 'none';
-        vehiclesContainer.style.display = 'none';
-        document.getElementById('kycContainer').style.display = 'block';
-        paginationContainer.style.display = 'flex';
-        currentKycPage = 1;
-        activeKycInnerTab = 'pending';
-        setupKycEventListeners();
-        renderKyc();
-    }
-}
-
 // Inner Tab Switching (for bookings)
 function switchInnerTab(tabName) {
     activeInnerTab = tabName;
@@ -1126,7 +1088,13 @@ function loadDocumentPreview(type, filePath) {
         return;
     }
 
-    const fileUrl = `/storage/${filePath}`;
+    if (!currentKycId) {
+        previewDiv.innerHTML = '<div class="preview-loading">Document unavailable</div>';
+        return;
+    }
+
+    // Identity documents live on private storage; serve them through the authorised route.
+    const fileUrl = `${API_BASE}/kyc/${currentKycId}/document/${type}`;
     const fileExtension = filePath.split('.').pop().toLowerCase();
 
     // Check if it's an image or PDF
@@ -1363,10 +1331,10 @@ function exportReportToCSV() {
     showToast('Export Successful', 'Report has been downloaded as CSV');
 }
 
-// Update switchTab function to handle reports tab
-const originalSwitchTab = window.switchTab || switchTab;
+// Tab Switching
 function switchTab(tabName) {
     activeTab = tabName;
+    currentPage = 1;
     
     tabs.forEach(tab => {
         tab.classList.toggle('active', tab.dataset.tab === tabName);
@@ -1385,8 +1353,11 @@ function switchTab(tabName) {
         currentVehiclePage = 1;
         renderVehicles();
     } else if (tabName === 'kyc') {
-        paginationContainer.style.display = 'none';
-        renderKycList();
+        paginationContainer.style.display = 'flex';
+        currentKycPage = 1;
+        activeKycInnerTab = 'pending';
+        setupKycEventListeners();
+        renderKyc();
     } else if (tabName === 'reports') {
         paginationContainer.style.display = 'none';
     }

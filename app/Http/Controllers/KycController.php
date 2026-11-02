@@ -30,37 +30,23 @@ class KycController extends Controller
             'permit_original_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
 
-        // Delete old documents if they exist
-        $kyc = $user->kyc;
-        if ($kyc) {
-            if ($kyc->id_document_path && Storage::disk('public')->exists($kyc->id_document_path)) {
-                Storage::disk('public')->delete($kyc->id_document_path);
-            }
-            if ($kyc->permit_document_path && Storage::disk('public')->exists($kyc->permit_document_path)) {
-                Storage::disk('public')->delete($kyc->permit_document_path);
-            }
-            if ($kyc->id_original_document_path && Storage::disk('public')->exists($kyc->id_original_document_path)) {
-                Storage::disk('public')->delete($kyc->id_original_document_path);
-            }
-            if ($kyc->permit_original_document_path && Storage::disk('public')->exists($kyc->permit_original_document_path)) {
-                Storage::disk('public')->delete($kyc->permit_original_document_path);
-            }
-        }
+        // Store new documents on the private disk before touching the old ones,
+        // so a failed upload never destroys previously submitted evidence.
+        $idDocPath = $request->file('id_document')->store('kyc/id_documents', 'private');
+        $permitDocPath = $request->file('permit_document')->store('kyc/permit_documents', 'private');
 
-        // Store new documents
-        $idDocPath = $request->file('id_document')->store('kyc/id_documents', 'public');
-        $permitDocPath = $request->file('permit_document')->store('kyc/permit_documents', 'public');
-        
         $idOriginalDocPath = null;
         $permitOriginalDocPath = null;
-        
+
         if ($request->hasFile('id_original_document')) {
-            $idOriginalDocPath = $request->file('id_original_document')->store('kyc/id_original_documents', 'public');
+            $idOriginalDocPath = $request->file('id_original_document')->store('kyc/id_original_documents', 'private');
         }
-        
+
         if ($request->hasFile('permit_original_document')) {
-            $permitOriginalDocPath = $request->file('permit_original_document')->store('kyc/permit_original_documents', 'public');
+            $permitOriginalDocPath = $request->file('permit_original_document')->store('kyc/permit_original_documents', 'private');
         }
+
+        $oldKyc = $user->kyc;
 
         // Create or update KYC
         $kyc = KycVerification::updateOrCreate(
@@ -71,13 +57,32 @@ class KycController extends Controller
                 'permit_number' => $validated['permit_number'],
                 'id_document_path' => $idDocPath,
                 'permit_document_path' => $permitDocPath,
-                'id_original_document_path' => $idOriginalDocPath,
-                'permit_original_document_path' => $permitOriginalDocPath,
+                'id_original_document_path' => $idOriginalDocPath ?? $oldKyc->id_original_document_path ?? null,
+                'permit_original_document_path' => $permitOriginalDocPath ?? $oldKyc->permit_original_document_path ?? null,
                 'status' => 'pending',
+                'verified_at' => null,
+                'rejection_reason' => null,
             ]
         );
 
+        if ($oldKyc) {
+            $this->deleteDocument($oldKyc->id_document_path, $kyc->id_document_path);
+            $this->deleteDocument($oldKyc->permit_document_path, $kyc->permit_document_path);
+            $this->deleteDocument($oldKyc->id_original_document_path, $kyc->id_original_document_path);
+            $this->deleteDocument($oldKyc->permit_original_document_path, $kyc->permit_original_document_path);
+        }
+
         return redirect('/kyc')->with('success', 'KYC documents submitted for verification. Please wait for admin approval.');
+    }
+
+    private function deleteDocument(?string $oldPath, ?string $newPath): void
+    {
+        if (!$oldPath || $oldPath === $newPath) {
+            return;
+        }
+
+        Storage::disk('private')->delete($oldPath);
+        Storage::disk('public')->delete($oldPath);
     }
 
     // Admin methods
@@ -139,10 +144,28 @@ class KycController extends Controller
             return response()->json(['error' => 'Invalid document type'], 400);
         }
 
-        if (!$path || !Storage::disk('public')->exists($path)) {
+        if (!$path) {
             return response()->json(['error' => 'Document not found'], 404);
         }
 
-        return Storage::disk('public')->download($path);
+        $disk = Storage::disk('private');
+        $legacyDisk = Storage::disk('public');
+
+        if ($disk->exists($path)) {
+            return $disk->response($path, null, [
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, no-store',
+            ]);
+        }
+
+        // Documents uploaded before the move to private storage.
+        if ($legacyDisk->exists($path)) {
+            return $legacyDisk->response($path, null, [
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, no-store',
+            ]);
+        }
+
+        return response()->json(['error' => 'Document not found'], 404);
     }
 }

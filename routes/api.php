@@ -1,7 +1,11 @@
 <?php
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use App\Http\Controllers\CarController;
 use App\Http\Controllers\BookingController;
 
@@ -23,9 +27,26 @@ Route::post('/auth/login', function (Request $request) {
         'password' => 'required',
     ]);
 
+    $throttleKey = 'api-login:' . Str::lower($request->email) . '|' . $request->ip();
+
+    if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+        return response()->json([
+            'message' => 'Too many login attempts. Please try again in ' . RateLimiter::availableIn($throttleKey) . ' seconds.',
+        ], 429);
+    }
+
     $user = \App\Models\User::where('email', $request->email)->first();
 
-    if (!$user || !\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+    // Always run a hash check so response time does not reveal whether the account exists.
+    $passwordMatches = Hash::check(
+        $request->password,
+        $user->password ?? '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
+    );
+
+    if (!$user || !$passwordMatches) {
+        RateLimiter::hit($throttleKey, 60);
+        $user?->incrementFailedAttempts();
+
         return response()->json([
             'message' => 'Invalid credentials'
         ], 401);
@@ -36,6 +57,8 @@ Route::post('/auth/login', function (Request $request) {
             'message' => 'Account is temporarily locked'
         ], 423);
     }
+
+    RateLimiter::clear($throttleKey);
 
     $token = $user->createApiToken('api-access');
     $user->updateLoginInfo($request->ip());
@@ -49,10 +72,10 @@ Route::post('/auth/login', function (Request $request) {
             'role' => $user->role,
         ]
     ]);
-});
+})->middleware('throttle:20,1');
 
 Route::middleware('auth:sanctum')->post('/auth/logout', function (Request $request) {
-    $request->user()->currentAccessToken()->delete();
+    $request->user()->currentAccessToken()?->delete();
     return response()->json(['message' => 'Logged out successfully']);
 });
 
@@ -70,14 +93,19 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     ]);
 });
 
-// Health check
-Route::get('/health', function() {
+// Liveness/readiness probe: no data leaked, 503 when the database is unreachable.
+Route::get('/health', function () {
+    try {
+        DB::select('select 1');
+    } catch (\Throwable $e) {
+        report($e);
+
+        return response()->json(['status' => 'error'], 503);
+    }
+
     return response()->json([
         'status' => 'ok',
-        'message' => 'MAM Tours API is running',
-        'timestamp' => now(),
-        'cars_count' => \App\Models\Car::count(),
-        'bookings_count' => \App\Models\Booking::count(),
+        'timestamp' => now()->toIso8601String(),
     ]);
 });
 
@@ -95,14 +123,15 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::delete('/cars/{id}', [CarController::class, 'destroy']);
 });
 
-// Protected Bookings API (authenticated users)
+// Bookings API (authenticated users)
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bookings', [BookingController::class, 'index']);
     Route::get('/bookings/{id}', [BookingController::class, 'show']);
-    Route::post('/bookings/reserve', [BookingController::class, 'reserve']);
+    Route::post('/bookings', [BookingController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('/bookings/reserve', [BookingController::class, 'reserve'])->middleware('throttle:10,1');
     Route::post('/bookings/{id}/confirm', [BookingController::class, 'confirm']);
     Route::post('/bookings/{id}/cancel', [BookingController::class, 'cancel']);
-    
+
     // Admin-only booking operations
     Route::middleware('admin')->group(function () {
         Route::post('/bookings/{id}/check-out', [BookingController::class, 'checkout']);
@@ -110,57 +139,54 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
-// Public Bookings API (unauthenticated users can submit bookings)
-Route::post('/bookings', [BookingController::class, 'store']);
-
-// Payment stubs (for compatibility)
-Route::post('/payments/intent', function(Request $request) {
-    return response()->json(['message' => 'Payment authorized', 'status' => 'authorized']);
-});
-Route::post('/payments/capture/{id}', function($id) {
-    return response()->json(['message' => 'Payment captured']);
-});
-Route::post('/payments/refund/{id}', function($id) {
-    return response()->json(['message' => 'Payment refunded']);
-});
-
 // Protected Reports (admin only)
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
-    Route::get('/reports/bookings.csv', function() {
-        $bookings = \App\Models\Booking::with('car')->get();
-        $csv = "id,carId,customerName,startDate,endDate,status,total,createdAt\n";
-        foreach($bookings as $booking) {
-            $total = $booking->pricing['total'] ?? '';
-            $csv .= implode(',', [
-                $booking->id,
-                $booking->car_id,
-                '"' . str_replace('"', '""', $booking->customerName) . '"',
-                $booking->startDate,
-                $booking->endDate,
-                $booking->status,
-                $total,
-                $booking->created_at
-            ]) . "\n";
-        }
-        return response($csv)->header('Content-Type', 'text/csv');
+    Route::get('/reports/bookings.csv', function () {
+        $filename = 'bookings-' . now()->format('Y-m-d') . '.csv';
+
+        return response()->streamDownload(function () {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['id', 'carId', 'customerName', 'startDate', 'endDate', 'status', 'total', 'createdAt']);
+
+            \App\Models\Booking::with('car')->lazyById(500)->each(function ($booking) use ($out) {
+                fputcsv($out, [
+                    $booking->id,
+                    $booking->car_id,
+                    $booking->customerName,
+                    $booking->startDate,
+                    $booking->endDate,
+                    $booking->status,
+                    $booking->pricing['total'] ?? '',
+                    $booking->created_at,
+                ]);
+            });
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
     });
 
-    Route::get('/reports/fleet.csv', function() {
-        $cars = \App\Models\Car::all();
-        $csv = "id,brand,model,numberPlate,dailyRate,seats,category,isAvailable\n";
-        foreach($cars as $car) {
-            $csv .= implode(',', [
-                $car->id,
-                '"' . str_replace('"', '""', $car->brand) . '"',
-                '"' . str_replace('"', '""', $car->model) . '"',
-                $car->numberPlate,
-                $car->dailyRate,
-                $car->seats,
-                $car->category ?? '',
-                $car->isAvailable ? 1 : 0
-            ]) . "\n";
-        }
-        return response($csv)->header('Content-Type', 'text/csv');
+    Route::get('/reports/fleet.csv', function () {
+        $filename = 'fleet-' . now()->format('Y-m-d') . '.csv';
+
+        return response()->streamDownload(function () {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['id', 'brand', 'model', 'numberPlate', 'dailyRate', 'seats', 'category', 'isAvailable']);
+
+            \App\Models\Car::query()->lazyById(500)->each(function ($car) use ($out) {
+                fputcsv($out, [
+                    $car->id,
+                    $car->brand,
+                    $car->model,
+                    $car->numberPlate,
+                    $car->dailyRate,
+                    $car->seats,
+                    $car->category ?? '',
+                    $car->isAvailable ? 1 : 0,
+                ]);
+            });
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
     });
 });
 
@@ -188,38 +214,6 @@ Route::post('/webhooks/receive', [\App\Http\Controllers\WebhookController::class
 
 // API Documentation
 Route::get('/docs/spec', [\App\Http\Controllers\ApiDocController::class, 'spec']);
-
-// Test Upload Endpoint (for debugging)
-Route::post('/test-upload', function (Request $request) {
-    try {
-        $request->validate([
-            'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120'
-        ]);
-        
-        if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $path = $file->store('test-uploads', 'public');
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'File uploaded successfully',
-                'file' => [
-                    'name' => $file->getClientOriginalName(),
-                    'size' => $file->getSize(),
-                    'path' => $path,
-                    'url' => asset('storage/' . $path)
-                ]
-            ]);
-        }
-        
-        return response()->json(['success' => false, 'message' => 'No file provided'], 400);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => $e->getMessage()
-        ], 500);
-    }
-});
 
 // KYC API v2 Routes
 Route::prefix('v2')->middleware('api.version:v2')->group(function () {
