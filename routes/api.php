@@ -23,9 +23,14 @@ Route::post('/auth/login', function (Request $request) {
         'password' => 'required',
     ]);
 
-    $user = \App\Models\User::where('email', $request->email)->first();
+    $email = strtolower(trim((string) $request->input('email')));
+    $user = \App\Models\User::where('email', $email)->first();
 
     if (!$user || !\Illuminate\Support\Facades\Hash::check($request->password, $user->password)) {
+        if ($user) {
+            $user->incrementFailedAttempts();
+        }
+
         return response()->json([
             'message' => 'Invalid credentials'
         ], 401);
@@ -49,7 +54,7 @@ Route::post('/auth/login', function (Request $request) {
             'role' => $user->role,
         ]
     ]);
-});
+})->middleware('throttle:login');
 
 Route::middleware('auth:sanctum')->post('/auth/logout', function (Request $request) {
     $request->user()->currentAccessToken()->delete();
@@ -76,8 +81,6 @@ Route::get('/health', function() {
         'status' => 'ok',
         'message' => 'MAM Tours API is running',
         'timestamp' => now(),
-        'cars_count' => \App\Models\Car::count(),
-        'bookings_count' => \App\Models\Booking::count(),
     ]);
 });
 
@@ -200,15 +203,15 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 // API v1 Routes
 Route::prefix('v1')->middleware('api.version:v1')->group(function () {
     Route::get('/cars', [\App\Http\Controllers\Api\V1\CarApiController::class, 'index']);
-    Route::get('/cars/{id}', [\App\Http\Controllers\Api\V1\CarApiController::class, 'show']);
     Route::get('/cars/search', [\App\Http\Controllers\Api\V1\CarApiController::class, 'search']);
+    Route::get('/cars/{id}', [\App\Http\Controllers\Api\V1\CarApiController::class, 'show']);
 });
 
 // API v2 Routes (Enhanced with more features)
 Route::prefix('v2')->middleware('api.version:v2')->group(function () {
     Route::get('/cars', [\App\Http\Controllers\Api\V2\CarApiController::class, 'index']);
-    Route::get('/cars/{id}', [\App\Http\Controllers\Api\V2\CarApiController::class, 'show']);
     Route::get('/cars/search', [\App\Http\Controllers\Api\V2\CarApiController::class, 'search']);
+    Route::get('/cars/{id}', [\App\Http\Controllers\Api\V2\CarApiController::class, 'show']);
 });
 
 // Stripe's provider-signed webhook is public but validates Stripe-Signature.

@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
+use App\Models\User;
 
 class LoginController extends Controller
 {
@@ -20,20 +21,24 @@ class LoginController extends Controller
     {
         $this->ensureIsNotRateLimited($request);
 
-        if (Auth::attempt($request->validated(), $request->remember)) {
+        $user = User::where('email', $request->input('email'))->first();
+        if ($user && $user->isLocked()) {
+            throw ValidationException::withMessages([
+                'email' => 'Account is temporarily locked due to too many failed attempts.',
+            ]);
+        }
+
+        if (Auth::attempt([
+            'email' => $request->input('email'),
+            'password' => $request->input('password'),
+        ], $request->boolean('remember'))) {
             $request->session()->regenerate();
             
             RateLimiter::clear($this->throttleKey($request));
             
             $user = Auth::user();
             
-            // Check if account is locked
-            if ($user->isLocked()) {
-                Auth::logout();
-                throw ValidationException::withMessages([
-                    'email' => 'Account is temporarily locked due to too many failed attempts.',
-                ]);
-            }
+            $user->updateLoginInfo($request->ip());
             
             // Log successful login
             activity()
@@ -47,6 +52,10 @@ class LoginController extends Controller
             
             // Redirect regular users to dashboard (not bookings for now)
             return redirect()->intended('/dashboard')->with('success', 'Login successful!');
+        }
+
+        if ($user) {
+            $user->incrementFailedAttempts();
         }
 
         RateLimiter::hit($this->throttleKey($request));

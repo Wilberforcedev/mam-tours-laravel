@@ -4,6 +4,15 @@ This branch implements an initial production-hardening and operations foundation
 
 ## Implemented in this branch
 
+### Follow-up hardening
+- Browser and API login now use an email-and-IP rate limit; failed known-account logins increment the configured account lockout counter.
+- Public health responses no longer expose environment, dependency versions, queue/storage metrics, or record counts.
+- Car-list pagination is validated and capped at 100 rows; v2 sorting is restricted to supported columns and directions.
+- Versioned car search routes are registered before the `{id}` routes so `/cars/search` reaches the search handler.
+- Reservation accepts either documented car identifier spelling (`carId` or `car_id`).
+- Only admin or booking staff can confirm reservations; confirmation is serialized to prevent duplicate concurrent state changes.
+- A booking cannot be canceled while the vehicle is in use, and fleet staff must check out a vehicle before recording its return.
+
 ### Booking availability and quotations
 - Checks date/time overlap against pending, reserved, confirmed and in-use bookings.
 - Locks the vehicle row during booking creation/reservation so concurrent requests for the same vehicle serialize on supported relational databases.

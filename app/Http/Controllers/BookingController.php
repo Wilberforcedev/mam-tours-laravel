@@ -278,7 +278,7 @@ class BookingController extends Controller
                 $pricing = $this->computePrice($car, $pickupDate, $returnDate, $validated['addOns'] ?? []);
 
                 return Booking::create([
-                    'car_id' => $validated['carId'],
+                    'car_id' => $validated['carId'] ?? $validated['car_id'],
                     'user_id' => auth()->id(),
                     'customerName' => $validated['customerName'],
                     'startDate' => $pickupAt,
@@ -314,21 +314,41 @@ class BookingController extends Controller
             return response()->json(['error' => 'Booking not found'], 404);
         }
         $user = auth()->user();
-        if (!$user || (!in_array($user->role, ['admin', 'booking'], true) && (int) $booking->user_id !== (int) $user->id)) {
+        if (!$user || !in_array($user->role, ['admin', 'booking'], true)) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
-        if (!in_array($booking->status, ['pending', 'reserved'])) {
+
+        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($id) {
+            $booking = Booking::whereKey($id)->lockForUpdate()->first();
+            if (!$booking) {
+                return ['status' => 404];
+            }
+            if (!in_array($booking->status, ['pending', 'reserved'], true)) {
+                return ['status' => 400];
+            }
+            if ($booking->expiresAt && $booking->expiresAt->isPast()) {
+                $booking->update(['status' => 'expired']);
+                return ['status' => 410];
+            }
+
+            $booking->update([
+                'status' => 'confirmed',
+                'confirmedAt' => now(),
+            ]);
+
+            return ['status' => 200, 'booking' => $booking];
+        });
+
+        if ($result['status'] === 404) {
+            return response()->json(['error' => 'Booking not found'], 404);
+        }
+        if ($result['status'] === 400) {
             return response()->json(['error' => 'Booking must be pending or reserved to confirm'], 400);
         }
-        if ($booking->expiresAt && $booking->expiresAt->isPast()) {
-            $booking->update(['status' => 'expired']);
-            return response()->json(['error' => 'Booking reservation has expired. Please select dates again.'], 400);
+        if ($result['status'] === 410) {
+            return response()->json(['error' => 'Booking reservation has expired. Please select dates again.'], 410);
         }
-
-        $booking->update([
-            'status' => 'confirmed',
-            'confirmedAt' => now(),
-        ]);
+        $booking = $result['booking'];
 
         // Send confirmation notification via email and SMS
         \App\Jobs\SendBookingConfirmationNotification::dispatch($booking, 'confirmed');
@@ -389,7 +409,7 @@ class BookingController extends Controller
         if (!$user || (!in_array($user->role, ['admin', 'booking'], true) && (int) $booking->user_id !== (int) $user->id)) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
-        if (in_array($booking->status, ['completed', 'returned', 'canceled', 'expired'])) {
+        if (in_array($booking->status, ['completed', 'returned', 'canceled', 'expired', 'in_use'], true)) {
             return response()->json(['error' => 'Cannot cancel'], 400);
         }
 
@@ -424,8 +444,8 @@ class BookingController extends Controller
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
-        if (!in_array($booking->status, ['in_use', 'confirmed'])) {
-            return response()->json(['error' => 'Booking not in use'], 400);
+        if ($booking->status !== 'in_use') {
+            return response()->json(['error' => 'Vehicle must be checked out before it can be returned'], 400);
         }
 
         if (isset($validated['return_odometer_km'], $booking->pickup_odometer_km)
