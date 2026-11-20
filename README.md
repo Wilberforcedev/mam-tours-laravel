@@ -1,4 +1,4 @@
-# 🚗 MAM Tours - Car Rental Made Simple
+# MAM Tours - Car Rental Made Simple
 
 Hey there! Welcome to MAM Tours, a car rental platform built to make booking vehicles as smooth as possible. Whether you're renting out cars or managing bookings, we've got you covered.
 
