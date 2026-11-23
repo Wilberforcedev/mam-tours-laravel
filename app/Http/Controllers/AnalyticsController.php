@@ -25,7 +25,8 @@ class AnalyticsController extends Controller
      */
     public function dashboard(Request $request)
     {
-        $days = $request->query('days', 30);
+        $filters = $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+        $days = (int) ($filters['days'] ?? 30);
         $data = $this->trackingService->getDashboardData($days);
         
         return view('admin.analytics.dashboard', $data);
@@ -36,7 +37,8 @@ class AnalyticsController extends Controller
      */
     public function data(Request $request)
     {
-        $days = $request->query('days', 30);
+        $filters = $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+        $days = (int) ($filters['days'] ?? 30);
         $data = $this->trackingService->getDashboardData($days);
         
         return response()->json($data);
@@ -47,7 +49,8 @@ class AnalyticsController extends Controller
      */
     public function visitors(Request $request)
     {
-        $days = $request->query('days', 7);
+        $filters = $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+        $days = (int) ($filters['days'] ?? 7);
         $startDate = \Carbon\Carbon::now()->subDays($days);
         
         $visitors = PageVisit::where('created_at', '>=', $startDate)
@@ -69,18 +72,25 @@ class AnalyticsController extends Controller
      */
     public function users(Request $request)
     {
-        $search = $request->query('search');
-        $sort = $request->query('sort', 'created_at');
-        $order = $request->query('order', 'desc');
-        
+        $filters = $request->validate([
+            'search' => 'nullable|string|max:255',
+            'sort' => 'sometimes|string|in:name,email,role,created_at,last_login_at',
+            'order' => 'sometimes|string|in:asc,desc',
+        ]);
+        $search = $filters['search'] ?? null;
+        $sort = $filters['sort'] ?? 'created_at';
+        $order = $filters['order'] ?? 'desc';
+
         $query = User::query();
-        
-        if ($search) {
-            $query->where('name', 'like', "%$search%")
-                ->orWhere('email', 'like', "%$search%")
-                ->orWhere('phone', 'like', "%$search%");
+
+        if ($search !== null && $search !== '') {
+            $query->where(function ($filter) use ($search) {
+                $filter->where('name', 'like', "%$search%")
+                    ->orWhere('email', 'like', "%$search%")
+                    ->orWhere('phone', 'like', "%$search%");
+            });
         }
-        
+
         $users = $query->orderBy($sort, $order)
             ->paginate(50);
         
@@ -106,7 +116,8 @@ class AnalyticsController extends Controller
      */
     public function activeUsers(Request $request)
     {
-        $minutes = $request->query('minutes', 30);
+        $filters = $request->validate(['minutes' => 'sometimes|integer|min:1|max:1440']);
+        $minutes = (int) ($filters['minutes'] ?? 30);
         $activeUsers = $this->trackingService->getActiveUsers($minutes);
         
         return view('admin.analytics.active-users', compact('activeUsers', 'minutes'));
@@ -117,7 +128,8 @@ class AnalyticsController extends Controller
      */
     public function pages(Request $request)
     {
-        $days = $request->query('days', 30);
+        $filters = $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+        $days = (int) ($filters['days'] ?? 30);
         $startDate = \Carbon\Carbon::now()->subDays($days);
         
         $pages = PageVisit::where('created_at', '>=', $startDate)
@@ -134,8 +146,9 @@ class AnalyticsController extends Controller
      */
     public function actions(Request $request)
     {
-        $days = $request->query('days', 7);
-        $actionType = $request->query('type');
+        $filters = $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+        $days = (int) ($filters['days'] ?? 7);
+        $actionType = $request->validate(['type' => 'nullable|string|max:100'])['type'] ?? null;
         $startDate = \Carbon\Carbon::now()->subDays($days);
         
         $query = UserAction::where('created_at', '>=', $startDate);
@@ -158,8 +171,9 @@ class AnalyticsController extends Controller
      */
     public function export(Request $request)
     {
-        $type = $request->query('type', 'visitors');
-        $days = $request->query('days', 30);
+        $type = $request->validate(['type' => 'sometimes|string|in:visitors,users,bookings'])['type'] ?? 'visitors';
+        $filters = $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+        $days = (int) ($filters['days'] ?? 30);
         $startDate = \Carbon\Carbon::now()->subDays($days);
         
         $filename = "analytics-{$type}-" . now()->format('Y-m-d-His') . '.csv';
@@ -238,8 +252,9 @@ class AnalyticsController extends Controller
      */
     public function chartData(Request $request)
     {
-        $type = $request->query('type', 'daily_visitors');
-        $days = $request->query('days', 30);
+        $type = $request->validate(['type' => 'sometimes|string|in:daily_visitors,daily_bookings,traffic_device,traffic_browser,top_pages'])['type'] ?? 'daily_visitors';
+        $filters = $request->validate(['days' => 'sometimes|integer|min:1|max:365']);
+        $days = (int) ($filters['days'] ?? 30);
         
         $data = match($type) {
             'daily_visitors' => $this->trackingService->getDailyVisitors($days),
