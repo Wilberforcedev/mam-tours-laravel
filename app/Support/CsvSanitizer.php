@@ -28,9 +28,9 @@ class CsvSanitizer
             return '';
         }
 
-        if ($value instanceof \\DateTimeInterface) {
+        if ($value instanceof \DateTimeInterface) {
             $value = $value->format('Y-m-d H:i:s');
-        } elseif ($value instanceof \\Stringable) {
+        } elseif ($value instanceof \Stringable) {
             $value = (string) $value;
         } elseif (!is_scalar($value)) {
             return '';
