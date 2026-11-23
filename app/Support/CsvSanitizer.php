@@ -28,11 +28,15 @@ class CsvSanitizer
             return '';
         }
 
-        if (!is_scalar($value)) {
+        if ($value instanceof \\DateTimeInterface) {
+            $value = $value->format('Y-m-d H:i:s');
+        } elseif ($value instanceof \\Stringable) {
+            $value = (string) $value;
+        } elseif (!is_scalar($value)) {
             return '';
+        } else {
+            $value = (string) $value;
         }
-
-        $value = (string) $value;
 
         if (preg_match('/^(?:[\x00-\x20]|\xEF\xBB\xBF)*[=+\-@]/', $value) === 1) {
             return "'" . $value;
