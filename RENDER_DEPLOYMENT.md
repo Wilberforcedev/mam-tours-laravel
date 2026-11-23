@@ -4,7 +4,7 @@ This repository deploys as a Docker web service. Render's managed database is Po
 
 ## Before creating the Blueprint
 
-1. Select a paid web service plan. The Blueprint uses a persistent disk and a pre-deploy command; both require a paid service plan.
+1. Select a paid web service plan. The Blueprint attaches a persistent disk, which requires a paid service plan and prevents horizontal scaling of that service.
 2. Choose a production Render Postgres plan with backups and retention suitable for customer and booking data. The Blueprint intentionally does not select a paid database plan.
 3. Prepare SMTP credentials from a transactional email provider. Mailtrap's sandbox credentials are not suitable for customer email.
 4. Review the current Laravel version and dependency support policy before launch. This application still uses Laravel 8 and requires a supported-framework upgrade before a production launch.
@@ -13,7 +13,7 @@ This repository deploys as a Docker web service. Render's managed database is Po
 
 Create a Render Blueprint from this repository and sync `render.yaml`. It defines a Docker web service and a managed Postgres database. The Docker image includes the PDO drivers for PostgreSQL and MySQL; Render uses PostgreSQL.
 
-The web service mounts a persistent disk at `storage/app`. This preserves public uploads and private KYC files across deploys and restarts. The disk is attached to a single service instance, so do not scale the web service horizontally until storage is migrated to object storage and the app's S3 adapter is installed and tested.
+The web service mounts a persistent disk at `storage/app`. This preserves public uploads and private KYC files across deploys and restarts. The disk is available to the web process at startup, so migrations run after the disk mounts and before Apache accepts traffic. Keep this service to one instance.
 
 On the first Blueprint sync, provide these secret environment values:
 
@@ -23,11 +23,11 @@ For an existing Render service, add the new values manually in its Environment s
 
 ## Runtime behavior and required services
 
-The web service has a health probe at `/ping`. Database migrations run in the pre-deploy phase, not on every web process start. The KYC disk is private and is not linked under the public web root. Back up legacy uploaded files before the first deployment and restore them to the persistent disk; Render's default filesystem is ephemeral.
+The web service has a health probe at `/ping`. Customer uploads persist on Render's disk, and KYC files remain outside the public storage symlink. Back up legacy uploaded files before the first deployment and restore them to the persistent disk; Render's default filesystem is ephemeral.
 
 Set up a separate scheduled task to run `php artisan schedule:run` every minute. The Laravel schedule sends booking reminders, expires booking holds, and sends fleet reminders. Configure database backups through Render Postgres or another durable backup service; the legacy `db:backup` command only supports MySQL and local filesystem output.
 
-The queue is currently synchronous. This is operational for low traffic but email/SMS and other queued work can increase request latency. Before scaling, provision a persistent queue backend and a worker running `php artisan queue:work --sleep=3 --tries=3 --timeout=90`.
+The queue is currently synchronous. This is operational for low traffic but email/SMS and other queued work can increase request latency. Before scaling, provision a persistent queue backend and a worker running `php artisan queue:work --sleep=3 --tries=3 --timeout=90`. Before horizontal scaling, migrate uploads to object storage, install Laravel 8's compatible S3 Flysystem adapter, and verify private KYC access.
 
 Payments remain disabled by default. Enable Stripe or IntaSend only after live credentials, webhook configuration, provider-supported currencies, and end-to-end payment/refund tests have been completed.
 

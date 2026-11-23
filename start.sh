@@ -12,5 +12,10 @@ esac
 # Render mounts the persistent disk after the image is created.
 mkdir -p /var/www/html/storage/app/public /var/www/html/storage/app/private /var/www/html/storage/app/backups
 chown -R www-data:www-data /var/www/html/storage/app
+
+# Run migrations after the persistent disk is mounted so file-moving migrations
+# can read and protect existing KYC uploads before the app accepts traffic.
+php artisan migrate --force
+
 sed -i "s/10000/$port/g" /etc/apache2/ports.conf /etc/apache2/sites-enabled/000-default.conf
 exec apache2-foreground

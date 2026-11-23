@@ -4,8 +4,6 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     healthCheckPath: /ping
-    # Requires a paid web plan; Render runs this once before traffic switches.
-    preDeployCommand: php artisan migrate --force
     disk:
       name: mam-tours-storage
       mountPath: /var/www/html/storage/app
