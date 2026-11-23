@@ -174,7 +174,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
             fputcsv($out, ['id', 'carId', 'customerName', 'startDate', 'endDate', 'status', 'total', 'createdAt']);
 
             \App\Models\Booking::with('car')->lazyById(500)->each(function ($booking) use ($out) {
-                fputcsv($out, [
+                fputcsv($out, \App\Support\CsvSanitizer::row([
                     $booking->id,
                     $booking->car_id,
                     $booking->customerName,
@@ -183,7 +183,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
                     $booking->status,
                     $booking->pricing['total'] ?? '',
                     $booking->created_at,
-                ]);
+                ]));
             });
 
             fclose($out);
@@ -198,7 +198,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
             fputcsv($out, ['id', 'brand', 'model', 'numberPlate', 'dailyRate', 'seats', 'category', 'isAvailable']);
 
             \App\Models\Car::query()->lazyById(500)->each(function ($car) use ($out) {
-                fputcsv($out, [
+                fputcsv($out, \App\Support\CsvSanitizer::row([
                     $car->id,
                     $car->brand,
                     $car->model,
@@ -207,7 +207,7 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
                     $car->seats,
                     $car->category ?? '',
                     $car->isAvailable ? 1 : 0,
-                ]);
+                ]));
             });
 
             fclose($out);
