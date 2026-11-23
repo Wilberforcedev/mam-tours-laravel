@@ -1,162 +1,49 @@
-Pre-Deployment Checklist
+# Production deployment checklist
 
-Quick checklist before you deploy to production.
+Use this checklist with [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md). The deployment target is defined by [render.yaml](render.yaml).
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Release blockers
 
-CODE READY?
+- [ ] Upgrade from Laravel 8 to a supported Laravel release and update dependencies.
+- [ ] Confirm GitHub Actions checks pass for the exact commit intended for deployment.
+- [ ] Complete staging tests and review open items in [the production readiness report](docs/PRODUCTION_READINESS_REMEDIATION.md).
+- [ ] Select a paid Render web plan and a PostgreSQL plan with backups appropriate for customer and booking data.
+- [ ] Confirm the business has approved payment, refund, deposit, privacy, and data-retention policies.
 
-□ Automated test suite reviewed and passing
-□ Deployment documentation matches actual provider configuration
-☑ README humanized and updated
-☑ Deployment scripts ready
-□ All features tested in staging, including concurrent booking attempts
-□ No console.log() or dd() left in code
-□ Error handling in place
+## Hosting and configuration
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- [ ] Create the Render resources by syncing the repository Blueprint.
+- [ ] Set `APP_URL` to the actual HTTPS domain.
+- [ ] Add transactional SMTP secrets: `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, and `MAIL_ADMIN_EMAIL`.
+- [ ] Confirm `APP_ENV=production`, `APP_DEBUG=false`, generated `APP_KEY`, secure cookies, and PostgreSQL configuration.
+- [ ] Keep the service at one instance while it uses the attached disk and in-container scheduler/worker.
+- [ ] Configure durable database backups and test restoring one.
+- [ ] Confirm log access, health checks, and an alert/incident contact.
 
-CONFIGURATION FILES
+## Data and privacy
 
-☑ .env.production template created
-☑ deploy.sh script ready
-☑ Procfile configured for Railway
-☑ nixpacks.toml configured
-☑ .railwayignore set up
-□ .env configured with production values
+- [ ] Back up the existing database, public uploads, and private KYC documents.
+- [ ] Review the document-storage migration against a production-like copy.
+- [ ] Restore existing files to the persistent disk at `storage/app`.
+- [ ] Verify KYC files cannot be fetched from public URLs and only authorized staff can review/download them.
+- [ ] Create the first administrator with `php artisan admin:create`; do not seed demo users or sample data in production.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Staging acceptance
 
-DATABASE
+- [ ] Test registration, sign-in, password reset, roles, and admin access.
+- [ ] Test simultaneous overlapping booking requests, booking holds, expiry, cancellation, and vehicle maintenance blocks.
+- [ ] Test KYC upload, review, private download, and retention/deletion procedures.
+- [ ] Test transactional email and scheduler-generated reminders.
+- [ ] Test queue processing and failed-job handling.
+- [ ] If payments are approved, test signed webhooks, amount/currency mismatch rejection, duplicate callbacks, refunds, and ledger reconciliation with provider test credentials.
+- [ ] Test backup restoration and recovery steps.
+- [ ] Review application and provider logs after a full staging run.
 
-□ Production database created
-□ Database credentials ready
-□ Migrations tested against a production-like copy
-□ Database and public/private storage backed up before migrations
-□ Legacy identity-document migration reviewed
-□ Seeder ready (optional)
-□ Admin user creation command tested
+## Release
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- [ ] Confirm every release blocker and staging acceptance item is complete.
+- [ ] Verify CI passes on the exact release commit; Render deploys only after checks pass.
+- [ ] Confirm the health endpoint responds and the deployed commit is correct.
+- [ ] Monitor logs, queue status, database backups, and payment-provider events after launch.
 
-THIRD-PARTY SERVICES
-
-Payment (Required)
-□ Stripe account/currency support verified before enabling card payments
-□ Stripe keys stored in hosting secrets
-□ Stripe webhook configured at /api/webhooks/stripe
-□ IntaSend live account activated for Uganda MTN/Airtel push
-□ IntaSend secret key and webhook challenge stored in hosting secrets
-□ IntaSend webhook configured at /api/webhooks/intasend
-□ Provider-confirmed test payment and refund/reconciliation completed in staging
-□ Payment amounts, currency, receipts, and ledger entries reconciled
-
-Email (Required)
-□ Email service chosen (Mailgun, SendGrid, etc.)
-□ SMTP credentials obtained
-□ Sender domain verified
-□ Test email sent successfully
-
-SMS (Optional but Recommended)
-□ SMS provider chosen (Africa's Talking or Twilio)
-□ API credentials obtained
-□ Test SMS sent successfully
-
-File Storage
-□ Storage solution chosen (S3 or local)
-□ If S3: Bucket created and credentials ready
-□ If local: Storage permissions configured
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-SECURITY
-
-□ APP_DEBUG=false in production
-□ APP_ENV=production set
-□ Strong APP_KEY generated
-□ HTTPS/SSL certificate ready
-□ SESSION_SECURE_COOKIE=true (requires HTTPS)
-□ No default admin account is seeded
-□ Stripe webhook signing secret and IntaSend challenge generated
-□ Payment provider flags remain disabled until UAT passes
-□ CORS settings configured
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-PERFORMANCE
-
-□ Redis available (recommended) or fallback to file/database
-□ Queue worker strategy decided
-□ Laravel scheduler running every minute for hold expiry and fleet reminders
-□ Caching strategy decided
-□ CDN considered for static assets (optional)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-MONITORING (Optional but Recommended)
-
-□ Error tracking service (Sentry) configured
-□ Log monitoring plan in place
-□ Backup strategy decided
-□ Uptime monitoring considered
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-RAILWAY SPECIFIC
-
-□ GitHub repository ready
-□ Railway account created
-□ MySQL database will be added on Railway
-□ Environment variables list prepared
-□ Domain name ready (optional)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-POST-DEPLOYMENT PLAN
-
-□ Test checklist prepared (see PRODUCTION_SETUP.md)
-□ Admin user creation command ready
-□ Car seeding plan ready
-□ Customer communication plan (if migrating)
-□ Rollback plan in case of issues
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-QUICK RAILWAY DEPLOYMENT
-
-Once everything above is checked:
-
-1. Push to GitHub
-
-  git add .
-  git commit -m "Ready for production"
-  git push origin main
-
-2. Deploy on Railway
-
-  - Go to https://railway.app
-  - New Project → Deploy from GitHub
-  - Select repository
-  - Add MySQL database
-  - Configure environment variables
-  - Generate domain
-
-3. After deployment
-
-  Create admin user (via the service shell; enter its password at the hidden prompt):
-  php artisan admin:create "Admin Name" admin@example.com
-  
-  Seed cars (optional):
-  php artisan db:seed --class=CarsSeeder
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-NEED HELP?
-
-- Deployment Guide: See RAILWAY_DEPLOYMENT.md
-- Production Setup: See PRODUCTION_SETUP.md
-- README: See README.md
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Do not deploy or accept live payments while critical checks remain unchecked. Stripe and IntaSend are disabled by default and require provider credentials, account activation, and staging verification.
+Payments are disabled by default. Do not enable Stripe or IntaSend until live credentials, callback verification, currency support, and the staging payment/refund tests are complete. See [the Render guide](RENDER_DEPLOYMENT.md) for runtime limits and setup details.
