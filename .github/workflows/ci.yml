@@ -9,7 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
     services:
       mysql:
         image: mysql:8.0
@@ -22,21 +21,21 @@ jobs:
 
     strategy:
       matrix:
-        php-version: [8.0, 8.1]
+        php-version: [8.2]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
         php-version: ${{ matrix.php-version }}
-        extensions: mbstring, dom, fileinfo, mysql, gd
+        extensions: mbstring, dom, fileinfo, pdo_mysql, gd
         coverage: xdebug
 
     - name: Cache Composer packages
       id: composer-cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: vendor
         key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
@@ -73,7 +72,7 @@ jobs:
       run: php artisan test --testsuite=Integration
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
@@ -81,38 +80,32 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
-        php-version: 8.0
+        php-version: '8.2'
 
     - name: Install dependencies
       run: composer install --prefer-dist --no-progress
 
-    - name: Run security audit
+    - name: Run Composer security audit
       run: composer audit
-
-    - name: Check for known security vulnerabilities
-      run: |
-        composer require --dev enlightn/security-checker
-        ./vendor/bin/security-checker security:check composer.lock
 
   deploy:
     needs: [test, security]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
+
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
-        php-version: 8.0
+        php-version: '8.2'
 
     - name: Install dependencies
       run: composer install --prefer-dist --no-progress --no-dev --optimize-autoloader
@@ -120,10 +113,10 @@ jobs:
     - name: Create deployment artifact
       env:
         GITHUB_SHA: ${{ github.sha }}
-      run: tar -czf "${GITHUB_SHA}".tar.gz --exclude=*.git --exclude=node_modules *
+      run: tar -czf "${GITHUB_SHA}.tar.gz" --exclude=*.git --exclude=node_modules *
 
     - name: Store artifact for distribution
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: app-build
         path: ${{ github.sha }}.tar.gz
