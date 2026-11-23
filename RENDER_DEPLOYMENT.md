@@ -11,7 +11,7 @@ This repository deploys as a Docker web service. Render's managed database is Po
 
 ## Create the Render resources
 
-Create a Render Blueprint from this repository and sync `render.yaml`. It defines a Docker web service and a managed Postgres database. The Docker image includes the PDO drivers for PostgreSQL and MySQL; Render uses PostgreSQL.
+Create a Render Blueprint from this repository and sync `render.yaml`. It defines a Docker web service and a managed Postgres database. The Docker image includes PDO drivers for PostgreSQL and MySQL; Render uses PostgreSQL.
 
 The web service mounts a persistent disk at `storage/app`. This preserves public uploads and private KYC files across deploys and restarts. The disk is available to the web process at startup, so migrations run after the disk mounts and before Apache accepts traffic. Keep this service to one instance.
 
@@ -21,13 +21,13 @@ On the first Blueprint sync, provide these secret environment values:
 
 For an existing Render service, add the new values manually in its Environment settings; Render does not prompt for `sync: false` values on later Blueprint syncs.
 
-## Runtime behavior and required services
+## Runtime behavior
 
-The web service has a health probe at `/ping`. Customer uploads persist on Render's disk, and KYC files remain outside the public storage symlink. Back up legacy uploaded files before the first deployment and restore them to the persistent disk; Render's default filesystem is ephemeral.
+Apache serves the Laravel application. Supervisor keeps Apache, Laravel's scheduler, and a database queue worker running in the same container. The scheduler handles booking reminders, booking-hold expiry, and fleet reminders. The queue uses PostgreSQL; queued mail and other jobs are processed by the worker. This one-container setup is intended for one web instance and should be replaced with separate worker/scheduler services before horizontal scaling.
 
-Set up a separate scheduled task to run `php artisan schedule:run` every minute. The Laravel schedule sends booking reminders, expires booking holds, and sends fleet reminders. Configure database backups through Render Postgres or another durable backup service; the legacy `db:backup` command only supports MySQL and local filesystem output.
+Customer uploads persist on Render's disk, and KYC files remain outside the public storage symlink. Back up legacy uploaded files before the first deployment and restore them to the persistent disk; Render's default filesystem is ephemeral.
 
-The queue is currently synchronous. This is operational for low traffic but email/SMS and other queued work can increase request latency. Before scaling, provision a persistent queue backend and a worker running `php artisan queue:work --sleep=3 --tries=3 --timeout=90`. Before horizontal scaling, migrate uploads to object storage, install Laravel 8's compatible S3 Flysystem adapter, and verify private KYC access.
+Configure database backups through Render Postgres or another durable backup service. The legacy `db:backup` command only supports MySQL and local filesystem output and is not part of the PostgreSQL schedule.
 
 Payments remain disabled by default. Enable Stripe or IntaSend only after live credentials, webhook configuration, provider-supported currencies, and end-to-end payment/refund tests have been completed.
 

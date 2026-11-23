@@ -18,4 +18,4 @@ chown -R www-data:www-data /var/www/html/storage/app
 php artisan migrate --force
 
 sed -i "s/10000/$port/g" /etc/apache2/ports.conf /etc/apache2/sites-enabled/000-default.conf
-exec apache2-foreground
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

@@ -17,19 +17,12 @@ class Kernel extends ConsoleKernel
     {
         // Send booking reminders every hour
         $schedule->command('bookings:send-reminders')->hourly();
-        
+
         // Release cars held by reservations that were never confirmed
         $schedule->command('bookings:expire-holds')
             ->everyFiveMinutes()
             ->withoutOverlapping();
-        
-        // Database backup daily at 2 AM with verification
-        $schedule->command('db:backup --verify')
-            ->dailyAt('02:00')
-            ->onFailure(function () {
-                \Log::error('Scheduled database backup failed');
-            });
-        
+
         // Notify fleet/admin staff of service and vehicle-document deadlines daily.
         $schedule->command('fleet:send-maintenance-reminders')->dailyAt('07:00')->withoutOverlapping();
     }

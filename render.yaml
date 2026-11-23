@@ -37,7 +37,7 @@ services:
       - key: CACHE_DRIVER
         value: database
       - key: QUEUE_CONNECTION
-        value: sync
+        value: database
       - key: FILESYSTEM_DRIVER
         value: local
       - key: MAIL_MAILER
