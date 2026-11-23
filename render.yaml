@@ -4,8 +4,12 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     healthCheckPath: /ping
-    # Render runs this once before switching traffic; use a paid web plan for pre-deploy commands.
+    # Requires a paid web plan; Render runs this once before traffic switches.
     preDeployCommand: php artisan migrate --force
+    disk:
+      name: mam-tours-storage
+      mountPath: /var/www/html/storage/app
+      sizeGB: 5
     envVars:
       - key: APP_NAME
         value: MAM Tours
@@ -36,21 +40,7 @@ services:
       - key: QUEUE_CONNECTION
         value: sync
       - key: FILESYSTEM_DRIVER
-        value: s3
-      - key: PUBLIC_FILESYSTEM_DRIVER
-        value: s3
-      - key: PRIVATE_FILESYSTEM_DRIVER
-        value: s3
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_DEFAULT_REGION
-        sync: false
-      - key: AWS_PUBLIC_BUCKET
-        sync: false
-      - key: AWS_PRIVATE_BUCKET
-        sync: false
+        value: local
       - key: MAIL_MAILER
         value: smtp
       - key: MAIL_PORT

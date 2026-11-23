@@ -9,5 +9,8 @@ case "$port" in
         ;;
 esac
 
+# Render mounts the persistent disk after the image is created.
+mkdir -p /var/www/html/storage/app/public /var/www/html/storage/app/private /var/www/html/storage/app/backups
+chown -R www-data:www-data /var/www/html/storage/app
 sed -i "s/10000/$port/g" /etc/apache2/ports.conf /etc/apache2/sites-enabled/000-default.conf
 exec apache2-foreground
