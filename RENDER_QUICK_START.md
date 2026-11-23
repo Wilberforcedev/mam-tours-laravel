@@ -1,107 +1,47 @@
-Render Quick Start
+# Render quick start
 
-Your app is now configured for Render! Here's what to do:
+This guide follows the repository's `render.yaml` Blueprint. It creates a Docker web service and managed PostgreSQL database. The Dockerfile builds the application; Render should use the Docker runtime without manual build or start commands.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Before production
 
-STEP 1: COMMIT AND PUSH
+This application currently uses Laravel 8, which is end of life. Upgrade to a supported Laravel release and pass CI and staging checks before using it with production customer data.
 
-  git add .
-  git commit -m "Configure for Render deployment"
-  git push origin main
+The Blueprint attaches a persistent disk, which requires a paid web service and keeps the service to one instance. Select a PostgreSQL plan with backups and retention appropriate for customer and booking data. Prepare a transactional SMTP account.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Create the Render resources
 
-STEP 2: GO TO RENDER
+1. Push the repository to GitHub.
+2. In Render, create a new Blueprint and select this repository and the `main` branch.
+3. Review the resources from `render.yaml` and sync the Blueprint.
+4. Choose a paid web service plan and a suitable managed PostgreSQL plan.
+5. Set the SMTP secrets when prompted:
+   - `MAIL_HOST`
+   - `MAIL_USERNAME`
+   - `MAIL_PASSWORD`
+   - `MAIL_FROM_ADDRESS`
+   - `MAIL_ADMIN_EMAIL`
 
-1. Visit https://render.com
-2. Sign up/Login with GitHub
-3. Click "New +" → "Web Service"
-4. Connect your repository
+The Blueprint sets production mode, generates `APP_KEY`, connects PostgreSQL through `DATABASE_URL`, enables secure session cookies, and uses database-backed sessions, cache, and queues. Payments stay disabled.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For an existing Render service, add missing secret values in its Environment settings. A later Blueprint sync may not prompt for values marked `sync: false`.
 
-STEP 3: CONFIGURE SERVICE
+## Before sending traffic
 
-Name: mam-tours
-Environment: Docker
-Region: Choose closest to you
-Branch: main
-Plan: Free
+1. Set `APP_URL` to the service's actual HTTPS domain if it differs from the value in `render.yaml`.
+2. Back up existing uploads and private KYC files. Restore them to the persistent disk at `storage/app` before directing users to the new service. Check file permissions and verify that KYC files remain private.
+3. Review the deployment logs. The container mounts storage, runs database migrations, then starts Apache, Laravel's scheduler, and a database queue worker under Supervisor.
+4. Create the administrator from the service Shell:
+   ```bash
+   php artisan admin:create "Your Name" admin@example.com
+   ```
+   The command prompts for a password without displaying it. Do not seed sample data in production.
+5. Run the full staging checks in [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md), including registration, booking and booking expiry, KYC upload and review, mail, queue processing, payment callbacks if enabled, database backups, and recovery.
+6. Confirm GitHub Actions checks pass and Render deploys the intended commit. The Blueprint is configured with `autoDeployTrigger: checksPass`.
 
-Build Command: bash build.sh
-Start Command: bash start.sh
+## Runtime limits to account for
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-STEP 4: ADD DATABASE
-
-Before creating the web service:
-
-1. Click "New +" → "MySQL"
-2. Name: mam-tours-db
-3. Plan: Free
-4. Click "Create Database"
-5. Save the credentials shown
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-STEP 5: ADD ENVIRONMENT VARIABLES
-
-In your web service, add these (use your database credentials):
-
-APP_NAME=MAM Tours
-APP_ENV=production
-APP_DEBUG=false
-APP_KEY=base64:KKmN0zpxMoDU1DkQa8ByHyZ/UD0b3+EoeKrJ3uRaktg=
-APP_URL=https://your-app-name.onrender.com
-
-DB_CONNECTION=mysql
-DB_HOST=your-database-host
-DB_PORT=3306
-DB_DATABASE=mam_tours
-DB_USERNAME=your-database-username
-DB_PASSWORD=your-database-password
-
-SESSION_DRIVER=file
-CACHE_DRIVER=file
-QUEUE_CONNECTION=sync
-
-MAIL_FROM_ADDRESS=noreply@mamtours.com
-MAIL_ADMIN_EMAIL=admin@example.com
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-STEP 6: DEPLOY
-
-Click "Create Web Service" and wait for deployment (5-10 minutes)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-STEP 7: CREATE ADMIN ACCOUNT
-
-After deployment, use Render Shell:
-
-1. Go to your service dashboard
-2. Click "Shell" tab
-3. Run: php artisan admin:create "Your Name" admin@example.com
-The command prompts for the password without displaying it.
-
-4. Run: php artisan db:seed --class=CarsSeeder
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-DONE!
-
-Your app will be live at: https://your-app-name.onrender.com
-
-For detailed instructions, see RENDER_DEPLOYMENT.md
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-IMPORTANT: Free Tier Notes
-
-- App sleeps after 15 minutes of inactivity
-- Takes 30-60 seconds to wake up
-- Perfect for testing and demos
-- Upgrade to paid plan for 24/7 uptime
+- Keep this service at one instance while it uses the attached disk and in-container scheduler/worker.
+- Do not add a duplicate cron scheduler for this service. Laravel's scheduler already runs in the container.
+- Before horizontal scaling, move queue and scheduler processes into separate services and use shared durable object storage for uploads.
+- Configure database backups through Render Postgres or another durable backup service. The legacy backup command is MySQL-specific and writes to local storage.
+- Keep Stripe and IntaSend disabled until live credentials, webhook signing, currency support, and full payment/refund checks are complete.
