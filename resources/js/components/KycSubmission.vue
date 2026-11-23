@@ -241,7 +241,7 @@ const getStatusTitle = (): string => {
     'rejected': 'Verification Rejected',
     'additional_info_required': 'Additional Information Required',
     'processing_failed': 'Processing Failed',
-    'auto_verified': 'Auto-Verified',
+    'auto_verified': 'Manual Review Required',
   }[kycStatus.value || ''] || 'Status Unknown';
 };
 
@@ -252,7 +252,7 @@ const getStatusMessage = (): string => {
     'rejected': 'Your verification was rejected. Please review the reason and resubmit.',
     'additional_info_required': 'We need more information to complete your verification.',
     'processing_failed': 'There was an error processing your documents. Please resubmit.',
-    'auto_verified': 'Your documents were automatically verified.',
+    'auto_verified': 'This previous automated result requires manual review before your identity is considered verified.',
   }[kycStatus.value || ''] || '';
 };
 

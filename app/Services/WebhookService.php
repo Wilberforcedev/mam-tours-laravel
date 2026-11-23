@@ -13,6 +13,7 @@ class WebhookService
      */
     public function registerEndpoint(string $url, array $events = []): array
     {
+        $this->assertPublicWebhookUrl($url);
         $secret = Str::random(64);
         
         $id = DB::table('webhook_endpoints')->insertGetId([
@@ -86,10 +87,12 @@ class WebhookService
             ->increment('attempts');
 
         try {
+            $this->assertPublicWebhookUrl($endpoint->url);
             $payload = json_decode($delivery->payload, true);
             $signature = $this->generateSignature($payload, $endpoint->secret);
 
             $response = Http::timeout(10)
+                ->withOptions(['allow_redirects' => false])
                 ->withHeaders([
                     'X-Webhook-Signature' => $signature,
                     'X-Webhook-Event' => $delivery->event_type,
@@ -143,6 +146,50 @@ class WebhookService
     {
         $expectedSignature = hash_hmac('sha256', $payload, $secret);
         return hash_equals($expectedSignature, $signature);
+    }
+
+    /**
+     * Reject webhook destinations that could reach local or private network services.
+     */
+    private function assertPublicWebhookUrl(string $url): void
+    {
+        $parts = parse_url($url);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower(rtrim(trim((string) ($parts['host'] ?? ''), '[]'), '.'));
+
+        if (!in_array($scheme, ['http', 'https'], true)
+            || $host === ''
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || in_array($host, ['localhost', 'metadata.google.internal'], true)
+            || preg_match('/\.(?:localhost|local|internal|test)$/i', $host)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['url' => ['Webhook URL must use a public host.']]);
+        }
+
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            $addresses = [$host];
+        } else {
+            $records = @dns_get_record($host, DNS_A | DNS_AAAA);
+            $addresses = [];
+
+            foreach (is_array($records) ? $records : [] as $record) {
+                if (isset($record['ip'])) {
+                    $addresses[] = $record['ip'];
+                } elseif (isset($record['ipv6'])) {
+                    $addresses[] = $record['ipv6'];
+                }
+            }
+        }
+
+        if (empty($addresses)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['url' => ['Webhook host must resolve to a public IP address.']]);
+        }
+
+        foreach ($addresses as $address) {
+            if (filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['url' => ['Webhook URL cannot target private or reserved IP addresses.']]);
+            }
+        }
     }
 
     /**

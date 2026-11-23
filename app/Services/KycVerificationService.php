@@ -308,11 +308,11 @@ class KycVerificationService
      */
     protected function checkDocumentQuality(KycVerification $kyc): array
     {
-        // Placeholder for actual OCR/quality check implementation
+        // Until document inspection is implemented, require a human reviewer.
         return [
-            'passed' => true,
-            'score' => 85,
-            'issues' => [],
+            'passed' => false,
+            'score' => 0,
+            'issues' => ['Automated document quality checks are not configured; manual review is required.'],
         ];
     }
 
@@ -339,12 +339,21 @@ class KycVerificationService
      */
     protected function checkForDuplicates(KycVerification $kyc): array
     {
+        // Laravel encryption is randomized, so compare normalized plaintext values
+        // after decrypting stored records rather than comparing ciphertext.
+        $idNumber = $this->normalizeSensitiveValue($this->decryptStoredSensitiveValue($kyc->id_number));
+        $permitNumber = $this->normalizeSensitiveValue($this->decryptStoredSensitiveValue($kyc->permit_number));
+
         $duplicates = KycVerification::where('id', '!=', $kyc->id)
-            ->where(function ($query) use ($kyc) {
-                $query->where('id_number', $kyc->id_number)
-                    ->orWhere('permit_number', $kyc->permit_number);
+            ->whereIn('status', ['verified', 'auto_verified'])
+            ->get(['id_number', 'permit_number'])
+            ->filter(function (KycVerification $existing) use ($idNumber, $permitNumber) {
+                $existingId = $this->normalizeSensitiveValue($this->decryptStoredSensitiveValue($existing->id_number));
+                $existingPermit = $this->normalizeSensitiveValue($this->decryptStoredSensitiveValue($existing->permit_number));
+
+                return ($idNumber !== null && $existingId !== null && hash_equals($idNumber, $existingId))
+                    || ($permitNumber !== null && $existingPermit !== null && hash_equals($permitNumber, $existingPermit));
             })
-            ->where('status', 'verified')
             ->count();
 
         return [
@@ -353,15 +362,39 @@ class KycVerificationService
         ];
     }
 
+    private function decryptStoredSensitiveValue(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return decrypt($value);
+        } catch (\Throwable $e) {
+            // Support legacy records saved before KYC values were encrypted.
+            return $value;
+        }
+    }
+
+    private function normalizeSensitiveValue(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        return strtoupper(trim($value));
+    }
+
     /**
      * Check against blacklist
      */
     protected function checkBlacklist(KycVerification $kyc): array
     {
-        // Placeholder for actual blacklist check
+        // An unconfigured check must never be treated as a clean result.
         return [
-            'passed' => true,
-            'blacklisted' => false,
+            'passed' => false,
+            'blacklisted' => null,
+            'issues' => ['Automated blacklist checks are not configured; manual review is required.'],
         ];
     }
 

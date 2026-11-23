@@ -9,6 +9,12 @@ use Illuminate\Support\Facades\Cache;
 
 class CacheManager
 {
+    /** Cache a computed value for the requested duration. */
+    public function remember(string $key, int $ttl, \Closure $callback)
+    {
+        return Cache::remember($key, $ttl, $callback);
+    }
+
     // Cache TTL constants (in seconds)
     private const TTL_CAR_LISTINGS = 300; // 5 minutes
     private const TTL_API_RESPONSE = 300; // 5 minutes

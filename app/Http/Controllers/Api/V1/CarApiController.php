@@ -21,18 +21,24 @@ class CarApiController extends Controller
      */
     public function index(Request $request)
     {
-        $perPage = $request->input('per_page', 15);
-        $category = $request->input('category');
-        
-        $cacheKey = "api.v1.cars.index.{$perPage}.{$category}";
-        
+        $validated = $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'page' => 'sometimes|integer|min:1',
+            'category' => 'nullable|string|max:50',
+        ]);
+        $perPage = (int) ($validated['per_page'] ?? 15);
+        $category = $validated['category'] ?? null;
+        $page = (int) ($validated['page'] ?? 1);
+
+        $cacheKey = "api.v1.cars.index.{$perPage}.{$category}.{$page}";
+
         $cars = $this->cacheManager->remember($cacheKey, 300, function () use ($perPage, $category) {
             $query = Car::where('isAvailable', true);
-            
+
             if ($category) {
                 $query->where('category', $category);
             }
-            
+
             return $query->paginate($perPage);
         });
 

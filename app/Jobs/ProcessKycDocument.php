@@ -41,14 +41,6 @@ class ProcessKycDocument implements ShouldQueue
             $riskScore = $this->calculateRiskScore($checks);
             $kyc->update(['risk_score' => $riskScore]);
 
-            // If all automated checks pass and risk is low, auto-approve
-            if ($this->shouldAutoApprove($checks, $riskScore)) {
-                $kyc->update([
-                    'status' => 'auto_verified',
-                    'verified_at' => now(),
-                ]);
-            }
-
             logger()->info('KYC document processed successfully', [
                 'kyc_id' => $this->kycId,
                 'risk_score' => $riskScore,
@@ -91,17 +83,6 @@ class ProcessKycDocument implements ShouldQueue
         }
 
         return min(100, $score);
-    }
-
-    protected function shouldAutoApprove(array $checks, int $riskScore): bool
-    {
-        // Auto-approve only if all checks pass and risk score is very low
-        $allChecksPassed = $checks['document_quality']['passed'] &&
-                          $checks['data_consistency']['passed'] &&
-                          $checks['duplicate_check']['passed'] &&
-                          $checks['blacklist_check']['passed'];
-
-        return $allChecksPassed && $riskScore < 10;
     }
 
     public function failed(\Throwable $exception): void

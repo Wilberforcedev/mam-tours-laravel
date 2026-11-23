@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V2;
 
 use App\Http\Controllers\Controller;
+use App\Models\Booking;
 use App\Models\Car;
 use App\Services\CacheManager;
 use App\Services\AnalyticsService;
@@ -24,22 +25,30 @@ class CarApiController extends Controller
      */
     public function index(Request $request)
     {
-        $perPage = $request->input('per_page', 15);
-        $category = $request->input('category');
-        $sortBy = $request->input('sort_by', 'created_at');
-        $sortOrder = $request->input('sort_order', 'desc');
-        
-        $cacheKey = "api.v2.cars.index.{$perPage}.{$category}.{$sortBy}.{$sortOrder}";
-        
+        $validated = $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'page' => 'sometimes|integer|min:1',
+            'category' => 'nullable|string|max:50',
+            'sort_by' => 'sometimes|in:created_at,dailyRate,brand,model,year',
+            'sort_order' => 'sometimes|in:asc,desc',
+        ]);
+        $perPage = (int) ($validated['per_page'] ?? 15);
+        $category = $validated['category'] ?? null;
+        $page = (int) ($validated['page'] ?? 1);
+        $sortBy = $validated['sort_by'] ?? 'created_at';
+        $sortOrder = $validated['sort_order'] ?? 'desc';
+
+        $cacheKey = "api.v2.cars.index.{$perPage}.{$category}.{$sortBy}.{$sortOrder}.{$page}";
+
         $cars = $this->cacheManager->remember($cacheKey, 300, function () use ($perPage, $category, $sortBy, $sortOrder) {
             $query = Car::where('isAvailable', true);
-            
+
             if ($category) {
                 $query->where('category', $category);
             }
-            
+
             $query->orderBy($sortBy, $sortOrder);
-            
+
             return $query->paginate($perPage);
         });
 
@@ -105,8 +114,8 @@ class CarApiController extends Controller
             'min_seats' => 'nullable|integer|min:1',
             'max_seats' => 'nullable|integer|max:50',
             'category' => 'nullable|string|max:50',
-            'available_from' => 'nullable|date',
-            'available_to' => 'nullable|date|after:available_from',
+            'available_from' => 'nullable|date_format:Y-m-d|after_or_equal:today|required_with:available_to',
+            'available_to' => 'nullable|date_format:Y-m-d|after:available_from|required_with:available_from',
         ]);
 
         $query = Car::where('isAvailable', true);
@@ -137,6 +146,29 @@ class CarApiController extends Controller
 
         if (isset($validated['category'])) {
             $query->where('category', $validated['category']);
+        }
+
+        if (isset($validated['available_from'], $validated['available_to'])) {
+            $pickupAt = $validated['available_from'] . ' 00:00:00';
+            $returnAt = $validated['available_to'] . ' 00:00:00';
+
+            $query->whereDoesntHave('bookings', function ($bookings) use ($pickupAt, $returnAt) {
+                $bookings->whereIn('status', Booking::ACTIVE_STATUSES)
+                    ->where('startDate', '<', $returnAt)
+                    ->where('endDate', '>', $pickupAt)
+                    ->where(function ($holds) {
+                        $holds->whereNotIn('status', Booking::HOLD_STATUSES)
+                            ->orWhereNull('expiresAt')
+                            ->orWhere('expiresAt', '>', now());
+                    });
+            })->whereDoesntHave('maintenanceRecords', function ($maintenance) use ($returnAt) {
+                $maintenance->where('blocks_rental', true)
+                    ->whereIn('status', ['scheduled', 'in_progress'])
+                    ->where(function ($dates) use ($returnAt) {
+                        $dates->whereNull('scheduled_for')
+                            ->orWhere('scheduled_for', '<', $returnAt);
+                    });
+            });
         }
 
         $cars = $query->paginate(15);
