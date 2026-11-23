@@ -3,6 +3,7 @@ services:
     name: mam-tours
     runtime: docker
     dockerfilePath: ./Dockerfile
+    autoDeployTrigger: checksPass
     healthCheckPath: /ping
     disk:
       name: mam-tours-storage
