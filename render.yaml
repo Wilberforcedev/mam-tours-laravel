@@ -1,17 +1,11 @@
 services:
   - type: web
     name: mam-tours
-    env: php
-    buildCommand: |
-      composer install --no-dev --optimize-autoloader
-      npm ci
-      npm run build
-      php artisan config:cache
-      php artisan route:cache
-      php artisan view:cache
-    startCommand: |
-      php artisan migrate --force
-      php artisan serve --host=0.0.0.0 --port=$PORT
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /ping
+    # Render runs this once before switching traffic; use a paid web plan for pre-deploy commands.
+    preDeployCommand: php artisan migrate --force
     envVars:
       - key: APP_NAME
         value: MAM Tours
@@ -26,47 +20,61 @@ services:
       - key: LOG_CHANNEL
         value: stack
       - key: LOG_LEVEL
-        value: error
+        value: warning
       - key: DB_CONNECTION
-        value: mysql
-      - key: DB_HOST
+        value: pgsql
+      - key: DATABASE_URL
         fromDatabase:
           name: mam-tours-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: mam-tours-db
-          property: port
-      - key: DB_DATABASE
-        fromDatabase:
-          name: mam-tours-db
-          property: database
-      - key: DB_USERNAME
-        fromDatabase:
-          name: mam-tours-db
-          property: user
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: mam-tours-db
-          property: password
+          property: connectionString
       - key: SESSION_DRIVER
-        value: file
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: true
       - key: CACHE_DRIVER
-        value: file
+        value: database
       - key: QUEUE_CONNECTION
         value: sync
+      - key: FILESYSTEM_DRIVER
+        value: s3
+      - key: PUBLIC_FILESYSTEM_DRIVER
+        value: s3
+      - key: PRIVATE_FILESYSTEM_DRIVER
+        value: s3
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_DEFAULT_REGION
+        sync: false
+      - key: AWS_PUBLIC_BUCKET
+        sync: false
+      - key: AWS_PRIVATE_BUCKET
+        sync: false
       - key: MAIL_MAILER
         value: smtp
-      - key: MAIL_HOST
-        value: smtp.mailtrap.io
       - key: MAIL_PORT
-        value: 2525
+        value: 587
+      - key: MAIL_ENCRYPTION
+        value: tls
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
       - key: MAIL_FROM_ADDRESS
-        value: noreply@mamtours.com
+        sync: false
       - key: MAIL_FROM_NAME
         value: MAM Tours
       - key: MAIL_ADMIN_EMAIL
-        value: wilberofficial2001@gmail.com
+        sync: false
+      - key: STRIPE_ENABLED
+        value: false
+      - key: INTASEND_ENABLED
+        value: false
+      - key: MOBILE_MONEY_ENABLED
+        value: false
 
 databases:
   - name: mam-tours-db

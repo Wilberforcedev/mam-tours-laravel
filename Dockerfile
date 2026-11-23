@@ -1,43 +1,28 @@
-FROM php:8.2-cli
+FROM php:8.2-apache
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip \
-    nodejs \
-    npm
+ENV PORT=10000
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl libpng-dev libonig-dev libxml2-dev libpq-dev libzip-dev zip unzip nodejs npm \
+    && docker-php-ext-install pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip \
+    && a2enmod rewrite headers \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Get Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-# Set working directory
-WORKDIR /app
-
-# Copy application files
+WORKDIR /var/www/html
 COPY . .
 
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
-RUN npm ci
-RUN npm run build
+COPY docker/apache/000-default.conf /etc/apache2/sites-available/000-default.conf
+RUN sed -i 's/^Listen 80$/Listen 10000/' /etc/apache2/ports.conf \
+    && composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader \
+    && npm ci \
+    && npm run build \
+    && mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs storage/app/private bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache \
+    && chmod +x start.sh
 
-# Set permissions
-RUN chmod -R 755 storage bootstrap/cache
-RUN chmod +x build.sh start.sh
-
-# Expose port
-EXPOSE 8000
-
-# Start application
-CMD ["bash", "start.sh"]
+EXPOSE 10000
+CMD ["./start.sh"]

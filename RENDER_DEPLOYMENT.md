@@ -1,207 +1,41 @@
-Render Deployment Guide for MAM Tours
+# Deploying MAM Tours to Render
 
-Quick guide to deploy your car rental app on Render.
+This repository deploys as a Docker web service. Render's managed database is PostgreSQL, so the service uses Laravel's `pgsql` connection. PHP is not a native Render runtime.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Before creating the Blueprint
 
-STEP 1: PUSH TO GITHUB
+1. Choose a paid web service plan. The Blueprint uses Render's pre-deploy command to run migrations once before traffic switches; this feature is not available on free web services.
+2. Choose a production Render Postgres plan with backups and retention suitable for customer and booking data. The Blueprint intentionally does not select a paid database plan.
+3. Create two object-storage buckets (or equivalent S3-compatible buckets): a public bucket for car/profile images and a private bucket for KYC identity documents. Keep public-read access disabled on the private bucket.
+4. Prepare SMTP credentials from a transactional email provider. Mailtrap's sandbox credentials are not suitable for customer email.
+5. Review the current Laravel version and dependency support policy before launch. This application still uses Laravel 8 and requires a supported-framework upgrade before a production launch.
 
-Make sure your code is on GitHub:
+## Create the Render resources
 
-  git add .
-  git commit -m "Ready for Render deployment"
-  git push origin main
+Create a Render Blueprint from this repository and sync `render.yaml`. It defines the Docker web service and a managed Postgres database. The Docker image installs both MySQL and PostgreSQL PDO drivers for compatibility with existing environments, but the Render service is configured for PostgreSQL.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+On the first Blueprint sync, provide these secret environment values:
 
-STEP 2: CREATE RENDER ACCOUNT
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`
+- `AWS_PUBLIC_BUCKET`, `AWS_PRIVATE_BUCKET`
+- `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_ADMIN_EMAIL`
 
-1. Go to https://render.com
-2. Sign up with your GitHub account
-3. Authorize Render to access your repositories
+For an existing Render service, add the new values manually in its Environment settings; Render does not prompt for `sync: false` values on later Blueprint syncs.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Runtime behavior and required services
 
-STEP 3: CREATE MYSQL DATABASE
+The web service has a health probe at `/ping`. Database migrations run in the pre-deploy phase, not on every web process start. Customer uploads use S3-compatible object storage so restarts and deploys do not erase them. Keep the KYC bucket private and grant the app only the minimum object permissions needed.
 
-1. Click "New +" → "MySQL"
-2. Name: mam-tours-db
-3. Database: mam_tours
-4. User: mam_tours_user
-5. Region: Choose closest to you
-6. Plan: Free
-7. Click "Create Database"
+Set up a separate scheduled task to run `php artisan schedule:run` every minute. The Laravel schedule sends booking reminders, expires booking holds, and sends fleet reminders. Configure database backups through Render Postgres or another durable backup service; the legacy `db:backup` command only supports MySQL and local filesystem output.
 
-Save these credentials (you'll need them):
-- Internal Database URL
-- External Database URL
-- Host
-- Port
-- Database
-- Username
-- Password
+The queue is currently synchronous. This is operational for low traffic but email/SMS and other queued work can increase request latency. Before scaling, provision a persistent queue backend and a worker running `php artisan queue:work --sleep=3 --tries=3 --timeout=90`.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Payments remain disabled by default. Enable Stripe or IntaSend only after live credentials, webhook configuration, provider-supported currencies, and end-to-end payment/refund tests have been completed.
 
-STEP 4: CREATE WEB SERVICE
+## Launch checks
 
-1. Click "New +" → "Web Service"
-2. Connect your GitHub repository
-3. Select "mam-tours-laravel" repository
-
-Configuration:
-- Name: mam-tours
-- Region: Same as database
-- Branch: main
-- Root Directory: (leave empty)
-- Environment: Docker
-- Plan: Free
-
-Build Settings:
-- Build Command: bash build.sh
-- Start Command: bash start.sh
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-STEP 5: ADD ENVIRONMENT VARIABLES
-
-Click "Environment" tab and add these variables:
-
-APP_NAME=MAM Tours
-APP_ENV=production
-APP_DEBUG=false
-APP_KEY=base64:KKmN0zpxMoDU1DkQa8ByHyZ/UD0b3+EoeKrJ3uRaktg=
-APP_URL=https://mam-tours.onrender.com
-
-LOG_CHANNEL=stack
-LOG_LEVEL=error
-
-DB_CONNECTION=mysql
-DB_HOST=(paste from database credentials)
-DB_PORT=(paste from database credentials)
-DB_DATABASE=mam_tours
-DB_USERNAME=(paste from database credentials)
-DB_PASSWORD=(paste from database credentials)
-
-SESSION_DRIVER=file
-CACHE_DRIVER=file
-QUEUE_CONNECTION=sync
-
-MAIL_MAILER=smtp
-MAIL_HOST=smtp.mailtrap.io
-MAIL_PORT=2525
-MAIL_USERNAME=null
-MAIL_PASSWORD=null
-MAIL_ENCRYPTION=null
-MAIL_FROM_ADDRESS=noreply@mamtours.com
-MAIL_FROM_NAME=MAM Tours
-MAIL_ADMIN_EMAIL=admin@example.com
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-STEP 6: DEPLOY
-
-1. Click "Create Web Service"
-2. Render will start building and deploying
-3. Wait 5-10 minutes for first deployment
-4. Watch the logs for any errors
-
-Your app will be live at: https://mam-tours.onrender.com
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-STEP 7: POST-DEPLOYMENT SETUP
-
-Once deployed, create your admin account from the service shell. The command prompts for the password without displaying it.
-
-Option A: Using Render Shell
-1. Go to your web service dashboard
-2. Click "Shell" tab
-3. Run: php artisan admin:create "Your Name" admin@example.com
-
-Option B: Using SSH (if available)
-1. Connect via SSH
-2. Navigate to your app directory
-3. Run the admin creation command
-
-Seed the cars:
-  php artisan db:seed --class=CarsSeeder
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-IMPORTANT NOTES
-
-Free Tier Limitations:
-- App spins down after 15 minutes of inactivity
-- Takes 30-60 seconds to wake up on first request
-- 750 hours/month of runtime
-- Database: 1GB storage, 97 connections
-
-Performance Tips:
-- App will be slow on first load (cold start)
-- Subsequent requests will be fast
-- Consider upgrading to paid plan for 24/7 uptime
-
-Custom Domain:
-- Go to Settings → Custom Domain
-- Add your domain
-- Update DNS records as instructed
-- Update APP_URL environment variable
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-TROUBLESHOOTING
-
-Build Failed:
-- Check build logs in Render dashboard
-- Verify composer.json and package.json are valid
-- Make sure all dependencies are listed
-
-App Not Loading:
-- Check runtime logs
-- Verify database connection
-- Check APP_KEY is set
-- Verify all environment variables
-
-Database Connection Error:
-- Double-check database credentials
-- Make sure DB_HOST uses internal database URL
-- Verify database is running
-
-500 Error:
-- Check logs: Click "Logs" in dashboard
-- Look for PHP errors
-- Verify .env variables are correct
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-UPDATING YOUR APP
-
-After making changes:
-
-1. Push to GitHub:
-   git add .
-   git commit -m "Update description"
-   git push origin main
-
-2. Render automatically detects the push and redeploys
-
-3. Monitor deployment in Render dashboard
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-ADDING PAYMENT PROCESSING
-
-When you're ready to accept payments:
-
-1. Get Stripe live keys from https://stripe.com
-2. Add to Render environment variables:
-   STRIPE_KEY=pk_live_...
-   STRIPE_SECRET=sk_live_...
-   STRIPE_WEBHOOK_SECRET=whsec_...
-
-3. Render will automatically redeploy
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-You're all set! Your MAM Tours app should now be live on Render.
+- Set the production domain in `APP_URL` and verify TLS and secure cookies.
+- Confirm database, SMTP, and both storage buckets are reachable from the service.
+- Back up legacy uploaded files before the first deploy; local Render filesystems are ephemeral.
+- Run the app's registration, booking, KYC upload/review, notification, admin, payment-webhook, and restore/recovery flows in a staging environment.
+- Confirm the deployed commit and health probe, then review logs and provider alerts after launch.
