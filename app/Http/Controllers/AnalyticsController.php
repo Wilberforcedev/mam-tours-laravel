@@ -194,13 +194,13 @@ class AnalyticsController extends Controller
                     ->orderByDesc('created_at')
                     ->chunk(100, function ($visits) use ($file) {
                         foreach ($visits as $visit) {
-                            fputcsv($file, [
+                            fputcsv($file, \App\Support\CsvSanitizer::row([
                                 $visit->created_at->format('Y-m-d H:i:s'),
                                 $visit->page_url,
                                 $visit->user?->name ?? 'Guest',
                                 $visit->ip_address,
                                 $visit->duration_seconds,
-                            ]);
+                            ]));
                         }
                     });
             } elseif ($type === 'users') {
@@ -210,14 +210,14 @@ class AnalyticsController extends Controller
                     ->orderByDesc('created_at')
                     ->chunk(100, function ($users) use ($file) {
                         foreach ($users as $user) {
-                            fputcsv($file, [
+                            fputcsv($file, \App\Support\CsvSanitizer::row([
                                 $user->name,
                                 $user->email,
                                 $user->phone,
                                 $user->role,
                                 $user->created_at->format('Y-m-d H:i:s'),
                                 $user->last_login_at?->format('Y-m-d H:i:s') ?? 'Never',
-                            ]);
+                            ]));
                         }
                     });
             } elseif ($type === 'bookings') {
@@ -228,7 +228,7 @@ class AnalyticsController extends Controller
                     ->orderByDesc('created_at')
                     ->chunk(100, function ($bookings) use ($file) {
                         foreach ($bookings as $booking) {
-                            fputcsv($file, [
+                            fputcsv($file, \App\Support\CsvSanitizer::row([
                                 $booking->id,
                                 $booking->customerName,
                                 $booking->car?->brand . ' ' . $booking->car?->model,
@@ -236,7 +236,7 @@ class AnalyticsController extends Controller
                                 $booking->endDate,
                                 $booking->status,
                                 $booking->totalPrice,
-                            ]);
+                            ]));
                         }
                     });
             }
